@@ -16,8 +16,17 @@ myenv/
 *.swp
 
 # Data (too large for git)
-jupiter/
+# jupiter/  <-- removed this
 data/
+
+# Specific ignores for jupiter folder
+jupiter/*.csv
+jupiter/*.zip
+jupiter/*.png
+jupiter/*.pinescript
+jupiter/.idea/
+jupiter/.ipynb_checkpoints/
+jupiter/simple ML/
 
 # Results (regeneratable)
 results/plots/

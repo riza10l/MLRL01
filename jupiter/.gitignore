@@ -1,0 +1,18 @@
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual environment
+.venv/
+env/
+
+# Jupyter notebook checkpoints
+.ipynb_checkpoints/
+
+# Data files (optional – keep if you want to version them)
+# data*.csv
+
+# OS files
+.DS_Store
+Thumbs.db
