@@ -1,19 +1,6 @@
 """
 MLRL01 V3 - Professional Quant Trading Engine
-================================================
 Gold Futures (GC=F) — ML + RL System
-HM = Riza Wahyu Nugraha
-
-V3 Upgrades:
-  - Multi-horizon target labels (5-day with threshold)
-  - ADX + trend persistence features
-  - Signal quality filters
-  - DSR reward function
-  - Multi-layer overtrading control
-  - Monte Carlo validation
-  - Professional metrics
-
-"ill keep evolving till i die" ahh machine
 """
 
 import os
@@ -46,9 +33,7 @@ from risk.risk_manager import RiskManager
 from monte_carlo.simulator import MonteCarloSimulator
 
 
-# ══════════════════════════════════════════════════════════════
-#  V3 CONFIGURATION
-# ══════════════════════════════════════════════════════════════
+# --- Configuration ---
 
 DATA_DIR        = "jupiter" if os.path.exists("jupiter") else "../jupiter"
 TRAIN_RATIO     = 0.80
@@ -81,17 +66,17 @@ def main():
     for d in [SAVE_DIR_PLOTS, SAVE_DIR_REPORTS, SAVE_DIR_MC, MODEL_SAVE_DIR]:
         os.makedirs(d, exist_ok=True)
 
-    # ── 1. Load Data ──────────────────────────────────────────
+    # --- Load Data ---
     df_raw = load_latest_data(DATA_DIR)
 
-    # ── 2. V3 Feature Engineering ─────────────────────────────
+    # --- Feature Engineering ---
     df = build_production_features(
         df_raw, 
         target_horizon=TARGET_HORIZON, 
         target_threshold=TARGET_THRESHOLD
     )
 
-    # ── 3. Get feature columns ────────────────────────────────
+    # --- Feature Columns ---
     feature_cols = get_production_feature_columns(df)
     # Fallback for ML training (needs old feature_engineering module)
     try:
@@ -107,19 +92,19 @@ def main():
     print(f"[CONFIG] Target: {TARGET_HORIZON}d horizon, {TARGET_THRESHOLD:.1%} threshold")
     print(f"[CONFIG] Monte Carlo: {'ON' if RUN_MONTE_CARLO else 'OFF'} ({MC_SIMULATIONS} sims)")
 
-    # ── 4. Split Data ─────────────────────────────────────────
+    # --- Split Data ---
     (X_train, X_test, y_train, y_test,
      X_train_sc, X_test_sc,
      dates_test, close_test, scaler) = split_data(df, ml_feature_cols, TRAIN_RATIO)
 
-    # ── 5. Train ML Models ────────────────────────────────────
+    # --- Train ML Models ---
     predictions, results_df, trained_models = train_ml_models(
         X_train, X_test, y_train, y_test, X_train_sc, X_test_sc
     )
     print("\n[ML] Model Ranking (by Accuracy):")
     print(results_df.to_string())
 
-    # ── 6. Train RL Agent ─────────────────────────────────────
+    # --- Train RL Agent ---
     split_idx = int(len(df) * TRAIN_RATIO)
     df_train_slice = df.iloc[:split_idx].reset_index(drop=True)
     df_test_slice = df.iloc[split_idx:].reset_index(drop=True)
@@ -147,15 +132,15 @@ def main():
           f"MaxDD: {rl_metrics['max_drawdown']:.2%} | "
           f"Trades: {rl_metrics['n_trades']}")
 
-    # ── 7. Backtest ML Models ─────────────────────────────────
+    # --- Backtest ML Models ---
     bt_engine = BacktestEngine()
     bt_results = bt_engine.run_ml_backtest(predictions, close_test, dates_test)
 
-    # ── 8. Run Benchmarks ─────────────────────────────────────
+    # --- Run Benchmarks ---
     benchmark_runner = BenchmarkRunner(df_test_slice)
     bm_results = benchmark_runner.run_all()
 
-    # ── 9. Compare RL vs Benchmarks ───────────────────────────
+    # --- Compare RL vs Benchmarks ---
     print("\n" + "=" * 65)
     print("  RL vs BENCHMARKS COMPARISON")
     print("=" * 65)
@@ -167,7 +152,7 @@ def main():
     else:
         print(f"  RL Sharpe ({rl_sharpe:.3f}) <= Buy&Hold ({bh_sharpe:.3f}) -> NEEDS MORE WORK")
 
-    # ── 10. Walk-Forward Validation ───────────────────────────
+    # --- Walk-Forward Validation ---
     wf_results = pd.DataFrame()
     if RUN_WALK_FWD:
         wf_results = walk_forward_validation(
@@ -175,7 +160,7 @@ def main():
             train_years=2, test_years=1, step_years=1,
         )
 
-    # ── 11. Monte Carlo Simulation ────────────────────────────
+    # --- Monte Carlo Simulation ---
     if RUN_MONTE_CARLO:
         print("\n" + "=" * 65)
         print("  MONTE CARLO VALIDATION")
@@ -211,7 +196,7 @@ def main():
         mc_df.to_csv(mc_path, index=False)
         print(f"  Report saved -> {mc_path}")
 
-    # ── 12. Generate Charts ───────────────────────────────────
+    # --- Generate Charts ---
     print("\n[CHARTS] Generating charts...")
 
     all_metrics = {}
@@ -230,7 +215,7 @@ def main():
     if not wf_results.empty:
         plot_walk_forward(wf_results, save_dir=SAVE_DIR_PLOTS)
 
-    # ── 13. Save Reports ──────────────────────────────────────
+    # --- Save Reports ---
     print("\n[SAVE] Saving reports...")
     save_risk_summary(all_metrics, save_dir=SAVE_DIR_REPORTS)
     save_comparison_csv(results_df, bt_results, save_dir=SAVE_DIR_REPORTS)

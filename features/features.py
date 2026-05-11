@@ -1,21 +1,5 @@
 """
 Features V3 — Professional Grade Feature Engineering
-=====================================================
-Upgrades:
-  - Multi-horizon target labels (3d, 5d, 10d) with threshold
-  - ADX trend strength
-  - Trend persistence
-  - Signal quality filters (no-trade zones)
-  - Multi-timeframe context
-  - Market structure (distance from high/low)
-  - All features are scale-free (ATR-normalized or bounded)
-
-Why each feature matters:
-  - ADX: Filters sideways noise. Only trade when ADX > 25.
-  - Trend persistence: Avoids false breakouts. Counts consecutive same-direction bars.
-  - Vol percentile: Context for regime — high vol = wider stops, lower size.
-  - Multi-timeframe: Weekly trend confirmation reduces daily noise by ~30%.
-  - Skew/Kurtosis: Detects distribution shifts before price moves.
 """
 
 import numpy as np
@@ -23,23 +7,12 @@ import pandas as pd
 from typing import List, Tuple
 
 
-# ═══════════════════════════════════════════════════════════════
-#  TARGET ENGINEERING
-# ═══════════════════════════════════════════════════════════════
+# --- Target Engineering ---
 
 def create_target(df: pd.DataFrame, horizon: int = 5, 
                   threshold: float = 0.005, method: str = "threshold") -> pd.DataFrame:
     """
     Professional target labels. Reduces noise vs naive next-bar prediction.
-    
-    Args:
-        horizon: Forward-looking return horizon (3, 5, 10 days)
-        threshold: Minimum return to count as signal (0.5% default)
-        method: 'threshold' (3-class) or 'binary' (above/below threshold)
-    
-    Why: Predicting next-bar direction is ~50% noise.
-         Predicting 5-bar direction with threshold filters out chop.
-         Expected accuracy improvement: +3-8% vs naive labels.
     """
     df = df.copy()
     
@@ -64,9 +37,7 @@ def create_target(df: pd.DataFrame, horizon: int = 5,
     return df
 
 
-# ═══════════════════════════════════════════════════════════════
-#  CORE FEATURE PIPELINE
-# ═══════════════════════════════════════════════════════════════
+# --- Core Feature Pipeline ---
 
 def build_production_features(df: pd.DataFrame, 
                                target_horizon: int = 5,
@@ -77,7 +48,7 @@ def build_production_features(df: pd.DataFrame,
     """
     df = df.copy()
     
-    # ── ATR (foundation for normalization) ────────────────────
+    # --- ATR ---
     tr = pd.concat([
         df['high'] - df['low'],
         (df['high'] - df['close'].shift()).abs(),
@@ -85,12 +56,12 @@ def build_production_features(df: pd.DataFrame,
     ], axis=1).max(axis=1)
     df['atr_14'] = tr.rolling(14).mean()
     
-    # ── Returns (multi-horizon) ───────────────────────────────
+    # --- Returns ---
     df['ret_1d'] = df['close'].pct_change(1)
     df['ret_5d'] = df['close'].pct_change(5)
     df['ret_20d'] = df['close'].pct_change(20)
     
-    # ── Trend Indicators (ATR-normalized) ─────────────────────
+    # --- Trend Indicators ---
     ema20 = df['close'].ewm(span=20, adjust=False).mean()
     ema50 = df['close'].ewm(span=50, adjust=False).mean()
     df['close_vs_ema20'] = (df['close'] - ema20) / (df['atr_14'] + 1e-8)
@@ -99,24 +70,21 @@ def build_production_features(df: pd.DataFrame,
     df['ema_slope_50'] = ema50.pct_change(10)
     df['trend_strength'] = (ema20 - ema50).abs() / (df['atr_14'] + 1e-8)
     
-    # ── ADX (Average Directional Index) ───────────────────────
-    # Why: Best single indicator for trend vs sideways detection.
-    # ADX > 25 = trending, ADX < 20 = sideways noise.
+    # --- ADX ---
     df = _add_adx(df, period=14)
     
-    # ── Trend Persistence ─────────────────────────────────────
-    # Why: Counts consecutive up/down bars. Filters false breakouts.
+    # --- Trend Persistence ---
     df['up_streak'] = _streak_count(df['ret_1d'] > 0)
     df['down_streak'] = _streak_count(df['ret_1d'] < 0)
     df['trend_persistence'] = df['up_streak'] - df['down_streak']
     
-    # ── Volatility Regime ─────────────────────────────────────
+    # --- Volatility Regime ---
     df['rvol_20'] = df['ret_1d'].rolling(20).std() * np.sqrt(252)
     df['rvol_60'] = df['ret_1d'].rolling(60).std() * np.sqrt(252)
     df['vol_ratio'] = df['rvol_20'] / (df['rvol_60'] + 1e-8)
     df['vol_percentile'] = df['rvol_20'].rolling(252).rank(pct=True)
     
-    # ── Mean Reversion ────────────────────────────────────────
+    # --- Mean Reversion ---
     ma20 = df['close'].rolling(20).mean()
     std20 = df['close'].rolling(20).std()
     df['bb_zscore'] = (df['close'] - ma20) / (std20 + 1e-8)
@@ -125,7 +93,7 @@ def build_production_features(df: pd.DataFrame,
               (df['volume'].rolling(20).sum() + 1e-8)
     df['vwap_dist'] = (df['close'] - vwap_20) / (df['atr_14'] + 1e-8)
     
-    # ── Momentum Quality ──────────────────────────────────────
+    # --- Momentum Quality ---
     df['rsi_14'] = _compute_rsi(df['close'], 14)
     df['rsi_14_norm'] = (df['rsi_14'] - 50) / 50
     

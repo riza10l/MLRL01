@@ -1,8 +1,5 @@
 """
-Benchmarks - Prioritas 3
-==========================
-Buy & Hold, SMA Crossover, Random Strategy.
-RL HARUS compare sama ini.
+Benchmarks for strategy evaluation.
 """
 
 import numpy as np

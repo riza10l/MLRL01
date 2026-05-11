@@ -1,19 +1,5 @@
 """
 Monte Carlo Simulation Module
-===============================
-Institutional-grade Monte Carlo analysis for trading strategy validation.
-
-Why Monte Carlo matters:
-  - A single backtest is ONE path through history
-  - Monte Carlo generates 1000+ possible paths
-  - Shows probability of ruin, worst-case scenarios
-  - Quantifies luck vs skill in performance
-  - Required for institutional strategy approval
-
-Methods:
-  1. Trade resampling (bootstrap trades with replacement)
-  2. Equity curve perturbation (add random noise to returns)
-  3. Randomized costs (vary slippage/spread within realistic range)
 """
 
 import os
@@ -39,9 +25,6 @@ class MonteCarloSimulator:
         """
         Bootstrap resampling of trade returns.
         Randomly reorders trades to see how path-dependent results are.
-        
-        Why: If your strategy is robust, shuffling trade order shouldn't
-             destroy performance. If it does, you're relying on lucky sequencing.
         """
         if len(trade_returns) == 0:
             return self._empty_result()
@@ -82,9 +65,6 @@ class MonteCarloSimulator:
                                 initial_capital: float = 100_000) -> dict:
         """
         Add random noise to daily returns to simulate model uncertainty.
-        
-        Why: Your backtest returns are point estimates. In reality, 
-             execution varies. This shows the range of possible outcomes.
         """
         if len(daily_returns) == 0:
             return self._empty_result()
@@ -124,9 +104,6 @@ class MonteCarloSimulator:
                            initial_capital: float = 100_000) -> dict:
         """
         Vary transaction costs randomly to simulate real-world execution.
-        
-        Why: Slippage and spread vary intraday. Your fixed cost assumption
-             may be optimistic. This shows cost sensitivity.
         """
         if len(daily_returns) == 0:
             return self._empty_result()
@@ -207,7 +184,7 @@ class MonteCarloSimulator:
         
         print(f"[MC] All plots saved to {save_dir}")
     
-    # ── Plot Functions ────────────────────────────────────────
+    # --- Plot Functions ---
     
     def _plot_equity_fan(self, result: dict, save_dir: str):
         """Fan chart showing percentile bands of equity paths."""
@@ -298,7 +275,7 @@ class MonteCarloSimulator:
         fig.savefig(os.path.join(save_dir, "mc_sharpe_hist.png"), dpi=150, bbox_inches='tight')
         plt.close(fig)
     
-    # ── Static Helpers ────────────────────────────────────────
+    # --- Static Helpers ---
     
     @staticmethod
     def _max_drawdown(equity):

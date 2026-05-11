@@ -1,8 +1,5 @@
 """
 Backtest Engine
-================
-Backtest ML model signals with realistic costs & risk management.
-Upgraded from trading_engine.py backtest_ml().
 """
 
 import numpy as np

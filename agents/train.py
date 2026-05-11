@@ -1,8 +1,5 @@
 """
-Training Script
-=================
-Train ML models + RL PPO agent.
-Supports Walk-Forward Validation (Prioritas 4).
+Training Script for ML models and RL agent.
 """
 
 import os
@@ -39,9 +36,9 @@ def load_latest_data(data_dir="../jupiter"):
     pattern = os.path.join(data_dir, "data*.csv")
     files = glob.glob(pattern)
     if not files:
-        raise FileNotFoundError(f"File data*.csv nggak ketemu di {data_dir}! Jalanin call.py dulu.")
+        raise FileNotFoundError(f"No data files found in {data_dir}")
     latest = max(files, key=os.path.getctime)
-    print(f"[DATA] Pake file terbaru: {latest}")
+    print(f"[DATA] Using file: {latest}")
     df = pd.read_csv(latest)
     df.columns = df.columns.str.strip().str.lower()
     df["date"] = pd.to_datetime(df["date"])
@@ -52,7 +49,7 @@ def load_latest_data(data_dir="../jupiter"):
 
 
 def split_data(df, feature_cols, train_ratio=0.80):
-    """Split time-series style (no shuffle)."""
+    """Split time-series data."""
     split_idx = int(len(df) * train_ratio)
     X = df[feature_cols]
     y = df["target"]
@@ -80,7 +77,7 @@ def get_ml_models():
 
 
 def train_ml_models(X_train, X_test, y_train, y_test, X_train_sc, X_test_sc):
-    """Train semua ML models."""
+    """Train ML models."""
     from sklearn.metrics import accuracy_score, precision_score, recall_score
     models = get_ml_models()
     predictions = {}

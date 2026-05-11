@@ -48,13 +48,7 @@ class DifferentialSharpeReward:
 
 class TradingEnv(gym.Env):
     """
-    Production-ready Gymnasium Environment for Financial Time-Series.
-    
-    V2 Upgrades (Professional Quant Review):
-      - Differential Sharpe Ratio reward (Moody & Saffell, 2001)
-      - Fixed observation builder (no destructive z-scoring)
-      - Multi-layer overtrading control (cooldown + escalating penalty)
-      - Holding duration in observation space
+    Gymnasium Environment for Financial Time-Series trading.
     """
     metadata = {"render_modes": ["human"]}
 

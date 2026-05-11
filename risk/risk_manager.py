@@ -59,7 +59,6 @@ class RiskManager:
 
     @staticmethod
     def sharpe_ratio(returns, rf=0.0, periods=252):
-        """Hitung Sharpe Ratio (annualized)."""
         returns = np.asarray(returns)
         if len(returns) < 2 or returns.std() == 0:
             return 0.0
@@ -67,7 +66,6 @@ class RiskManager:
 
     @staticmethod
     def sortino_ratio(returns, rf=0.0, periods=252):
-        """Sortino Ratio: only penalizes downside volatility."""
         returns = np.asarray(returns)
         excess = returns - rf
         downside = returns[returns < rf]
@@ -80,7 +78,6 @@ class RiskManager:
 
     @staticmethod
     def calmar_ratio(returns, equity_curve, periods=252):
-        """Calmar Ratio = annualized return / max drawdown."""
         mdd = abs(RiskManager.max_drawdown(equity_curve))
         if mdd == 0:
             return 0.0
@@ -89,7 +86,6 @@ class RiskManager:
 
     @staticmethod
     def total_return(equity_curve):
-        """Total return as percentage."""
         equity = np.asarray(equity_curve)
         if len(equity) < 2 or equity[0] == 0:
             return 0.0
@@ -97,7 +93,6 @@ class RiskManager:
 
     @staticmethod
     def annualized_return(equity_curve, periods=252):
-        """Annualized return."""
         total_ret = RiskManager.total_return(equity_curve)
         n_periods = len(equity_curve) - 1
         if n_periods <= 0:
@@ -109,7 +104,6 @@ class RiskManager:
 
     @staticmethod
     def win_rate(trades_pnl):
-        """Win rate from list of trade PnLs."""
         if not trades_pnl:
             return 0.0
         wins = sum(1 for p in trades_pnl if p > 0)
@@ -117,7 +111,6 @@ class RiskManager:
 
     @staticmethod
     def profit_factor(trades_pnl):
-        """Profit factor = gross profit / gross loss."""
         gross_profit = sum(p for p in trades_pnl if p > 0)
         gross_loss = abs(sum(p for p in trades_pnl if p < 0))
         if gross_loss == 0:
@@ -126,7 +119,6 @@ class RiskManager:
 
     @staticmethod
     def compute_all_metrics(equity_curve, trades_pnl=None, rf=0.0, periods=252):
-        """Compute semua risk metrics sekaligus."""
         equity = np.asarray(equity_curve)
         returns = np.diff(equity) / (equity[:-1] + 1e-10)
 

@@ -1,9 +1,5 @@
 """
 Backtest Metrics
-=================
-Centralized metric computation for backtesting.
-
-"ill keep evolving till i die" ahh machine
 """
 
 import numpy as np

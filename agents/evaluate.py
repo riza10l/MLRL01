@@ -1,7 +1,5 @@
 """
-Evaluation Script
-==================
-Evaluate trained agents, generate charts, save reports.
+Evaluation Script for trained agents.
 """
 
 import os
@@ -27,7 +25,7 @@ def ensure_dir(path):
 
 def plot_equity_curves(all_results, rl_equity=None, benchmark_results=None,
                        dates=None, capital=100_000, save_dir="../results/plots"):
-    """Equity curve semua strategy + benchmarks."""
+    """Plot equity curves for all strategies and benchmarks."""
     ensure_dir(save_dir)
     fig, ax = plt.subplots(figsize=(16, 7))
 
@@ -65,7 +63,7 @@ def plot_equity_curves(all_results, rl_equity=None, benchmark_results=None,
 
 
 def plot_prediction_charts(predictions, dates_test, close_test, save_dir="../results/plots"):
-    """Per-model prediction vs actual."""
+    """Plot model predictions vs actual price."""
     ensure_dir(save_dir)
     for name, preds in predictions.items():
         safe_name = name.lower().replace(" ", "_")
