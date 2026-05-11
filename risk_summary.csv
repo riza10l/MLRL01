@@ -1,0 +1,9 @@
+Model,Return (%),Max DD (%),Sharpe,Trades
+Logistic Regression,+94.88%,-4.52%,2.51,150
+Decision Tree,+66.37%,-4.07%,2.22,145
+Random Forest,+5.37%,-3.60%,0.62,95
+Gradient Boosting,+15.48%,-2.97%,1.22,88
+XGBoost,+18.85%,-3.18%,1.30,137
+LightGBM,+12.74%,-3.09%,1.10,79
+SVM,+54.31%,-10.95%,1.79,153
+PPO (RL),+0.00%,0.00%,0.00,N/A
