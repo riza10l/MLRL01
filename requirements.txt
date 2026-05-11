@@ -1,0 +1,19 @@
+# MLRL01 Dependencies
+pandas
+numpy
+matplotlib
+scikit-learn
+xgboost
+lightgbm
+stable-baselines3
+gymnasium
+yfinance
+pyyaml
+schedule
+requests
+
+# Optional - Prioritas 9: LSTM PPO
+# sb3-contrib
+
+# Optional - Prioritas 10: HMM Regime
+# hmmlearn

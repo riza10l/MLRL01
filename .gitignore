@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+myenv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Data (too large for git)
+jupiter/
+data/
+
+# Results (regeneratable)
+results/plots/
+results/monte_carlo/
+results/wf_v3/
+
+# Models (binary, too large)
+models/saved_models/*.zip
+
+# OS
+.DS_Store
+Thumbs.db
