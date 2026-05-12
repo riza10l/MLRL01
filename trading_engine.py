@@ -57,11 +57,11 @@ TRAIN_RATIO     = 0.80            # 80% data buat training
 FEATURE_COLS    = ["return", "range", "ma10", "ma50",
                    "volatility", "ma10_ma50_diff",
                    "vol_ma10", "price_ma10"]
-RL_TIMESTEPS    = 100_000          # Total timesteps training PPO
+RL_TIMESTEPS    = 10_000          # Total timesteps training PPO
 RL_WINDOW       = 30              # Jumlah hari buat observasi RL
 
 # ── Risk Management Config ─────────────────────────────────
-INITIAL_CAPITAL = 100_000         # Modal awal (USD)
+INITIAL_CAPITAL = 10_000         # Modal awal (USD)
 RISK_PER_TRADE  = 0.02            # Risiko per trade (2% dari modal)
 STOP_LOSS_PCT   = 0.01           # Stop-loss 1%
 TAKE_PROFIT_PCT = 0.015            # Take-profit 1.5%
