@@ -1,3 +1,3 @@
-from backtest.engine import BacktestEngine
-from backtest.metrics import BacktestMetrics
-from backtest.benchmarks import BenchmarkRunner
+from .engine import BacktestEngine
+from .metrics import BacktestMetrics
+from .benchmarks import BenchmarkRunner

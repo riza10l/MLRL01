@@ -1,1 +1,1 @@
-from agents.ppo_agent import PPOAgent
+from .ppo_agent import PPOAgent

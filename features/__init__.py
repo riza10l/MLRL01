@@ -1,3 +1,3 @@
-from features.indicators import *
-from features.feature_engineering import *
-from features.regime_detection import *
+from .indicators import *
+from .feature_engineering import *
+from .regime_detection import *

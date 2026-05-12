@@ -1,23 +1,42 @@
+"""
+Trading Environment V4 — Leakage-Free Gymnasium Env
+=====================================================
+FIXES:
+  - Observation uses features at (current_step - 1) to avoid bar-completion lookahead
+  - Reward: Differential Sharpe Ratio + drawdown penalty + overtrading penalty
+  - Action space: Discrete exposure levels with proper friction modeling
+  - Kill switch on excessive drawdown
+
+"ill keep evolving till i die" ahh machine
+"""
+
 import numpy as np
 import pandas as pd
 import gymnasium as gym
 from gymnasium import spaces
 from typing import Dict, Tuple, Any
 
+
 class DifferentialSharpeReward:
     """
     Differential Sharpe Ratio (Moody & Saffell, 2001).
     Directly optimizes for Sharpe ratio instead of raw P&L.
     """
-    def __init__(self, eta=0.02, lambda_cost=5.0, lambda_dd=2.0):
+    def __init__(self, eta=0.02, lambda_cost=5.0, lambda_dd=2.0,
+                 lambda_overtrade=0.5):
         self.eta = eta
         self.lambda_cost = lambda_cost
         self.lambda_dd = lambda_dd
+        self.lambda_overtrade = lambda_overtrade
         self.A = 0.0  # EMA of returns
         self.B = 0.0  # EMA of squared returns
         self.peak_equity = 1.0
+        self.n_trades = 0
+        self.n_steps = 0
 
-    def compute(self, step_return, friction_paid, equity_ratio):
+    def compute(self, step_return, friction_paid, equity_ratio, trade_executed):
+        self.n_steps += 1
+
         # 1. Update running statistics
         self.A += self.eta * (step_return - self.A)
         self.B += self.eta * (step_return**2 - self.B)
@@ -27,7 +46,7 @@ class DifferentialSharpeReward:
         if denom > 1e-10:
             dsr = (self.B * step_return - 0.5 * self.A * step_return**2) / (denom ** 1.5)
         else:
-            dsr = step_return * 10  # Scale up tiny returns for gradient signal
+            dsr = step_return * 10
 
         # 3. Transaction cost penalty
         cost_penalty = self.lambda_cost * friction_paid
@@ -37,18 +56,33 @@ class DifferentialSharpeReward:
         dd = (self.peak_equity - equity_ratio) / (self.peak_equity + 1e-8)
         dd_penalty = self.lambda_dd * max(0, dd - 0.02) ** 2
 
-        reward = dsr - cost_penalty - dd_penalty
+        # 5. Overtrading penalty
+        overtrade_penalty = 0.0
+        if trade_executed:
+            self.n_trades += 1
+            trade_rate = self.n_trades / max(self.n_steps, 1)
+            if trade_rate > 0.15:  # More than 15% of bars = overtrading
+                overtrade_penalty = self.lambda_overtrade * (trade_rate - 0.15)
+
+        reward = dsr - cost_penalty - dd_penalty - overtrade_penalty
         return np.clip(reward, -1, 1)
 
     def reset(self):
         self.A = 0.0
         self.B = 0.0
         self.peak_equity = 1.0
+        self.n_trades = 0
+        self.n_steps = 0
 
 
 class TradingEnv(gym.Env):
     """
     Gymnasium Environment for Financial Time-Series trading.
+
+    V4 FIXES:
+      - Observation uses features at (current_step - 1) to prevent lookahead
+      - Professional reward function with overtrading penalty
+      - Kill switch at 20% drawdown
     """
     metadata = {"render_modes": ["human"]}
 
@@ -63,8 +97,9 @@ class TradingEnv(gym.Env):
         spread_cost: float = 0.0003,    # 0.03%
         slippage: float = 0.0002,       # 0.02%
         # Constraints
-        min_hold_period: int = 5,       # Minimum bars before position change
-        cooldown_after_loss: int = 3,   # Extra cooldown bars after a losing trade
+        min_hold_period: int = 5,
+        cooldown_after_loss: int = 3,
+        max_drawdown_kill: float = 0.20,
         # DSR Reward Params
         dsr_eta: float = 0.02,
         dsr_lambda_cost: float = 5.0,
@@ -74,7 +109,9 @@ class TradingEnv(gym.Env):
 
         self.df = df.reset_index(drop=True)
         self.feature_columns = feature_columns
-        self.window_size = window_size
+        # Auto-adjust window if dataset is too small
+        max_window = max(1, len(self.df) - 5)
+        self.window_size = min(window_size, max_window)
         self.initial_capital = initial_capital
 
         # Friction
@@ -86,6 +123,7 @@ class TradingEnv(gym.Env):
         # Constraints
         self.min_hold_period = min_hold_period
         self.cooldown_after_loss = cooldown_after_loss
+        self.max_drawdown_kill = max_drawdown_kill
 
         # DSR Reward
         self.reward_fn = DifferentialSharpeReward(
@@ -96,9 +134,9 @@ class TradingEnv(gym.Env):
         self.position_levels = [0.0, 0.5, 1.0, -0.5, -1.0]
         self.action_space = spaces.Discrete(len(self.position_levels))
 
-        # Observation Space: latest features + portfolio state (4 dims)
+        # Observation Space: features + portfolio state (4 dims)
         n_features = len(self.feature_columns) if self.feature_columns else 1
-        obs_dim = n_features + 4  # features + [position, unrealized_pnl, drawdown, hold_duration]
+        obs_dim = n_features + 4
         self.observation_space = spaces.Box(
             low=-np.inf, high=np.inf, shape=(obs_dim,), dtype=np.float32
         )
@@ -116,6 +154,7 @@ class TradingEnv(gym.Env):
         self.steps_since_entry = 0
         self.cooldown_remaining = 0
         self.last_trade_pnl = 0.0
+        self.killed = False
 
         self.equity_history = [self.initial_capital]
         self.returns_history = []
@@ -128,23 +167,28 @@ class TradingEnv(gym.Env):
     def step(self, action: int) -> Tuple[np.ndarray, float, bool, bool, Dict]:
         price_now = self.df.iloc[self.current_step]['close']
 
+        # Kill switch check
+        if self.killed:
+            self.current_step += 1
+            terminated = self.current_step >= len(self.df) - 1
+            self.equity_history.append(self.equity_history[-1])
+            return self._get_obs(), -0.01, terminated, False, {"killed": True}
+
         # 1. Action Mapping & Multi-Layer Overtrading Control
         target_position = self.position_levels[action]
         trade_executed = False
         friction_paid = 0.0
 
         if self.position_pct != target_position:
-            # Layer 1: Minimum hold period
             hold_ok = (self.position_pct == 0) or (self.steps_since_entry >= self.min_hold_period)
-            # Layer 2: Cooldown after losing trade
             cooldown_ok = self.cooldown_remaining <= 0
 
             if hold_ok and cooldown_ok:
-                # Record PnL of closing trade (if we had a position)
+                # Record PnL of closing trade
                 if self.position_pct != 0 and self.entry_price > 0:
                     self.last_trade_pnl = self.position_pct * (price_now - self.entry_price) / self.entry_price
 
-                # Execute trade
+                # Execute trade with friction
                 diff = abs(target_position - self.position_pct)
                 friction_paid = diff * self.total_friction
                 self.capital *= (1 - friction_paid)
@@ -154,7 +198,6 @@ class TradingEnv(gym.Env):
                 self.steps_since_entry = 0
                 trade_executed = True
 
-                # Log the trade
                 self.trade_log.append({
                     "step": self.current_step,
                     "price": price_now,
@@ -163,10 +206,8 @@ class TradingEnv(gym.Env):
                     "pnl": self.last_trade_pnl,
                 })
 
-                # Layer 3: Set cooldown if last trade was a loss
                 if self.last_trade_pnl < 0:
                     self.cooldown_remaining = self.cooldown_after_loss
-            # else: action masked, keep current position
 
         # Decrement cooldown
         if self.cooldown_remaining > 0:
@@ -182,14 +223,19 @@ class TradingEnv(gym.Env):
         self.equity_history.append(current_equity)
         self.peak_equity = max(self.peak_equity, current_equity)
 
-        # 3. Calculate Reward (Differential Sharpe Ratio)
+        # 3. Kill switch: stop trading if drawdown exceeds limit
+        current_dd = (self.peak_equity - current_equity) / (self.peak_equity + 1e-8)
+        if current_dd >= self.max_drawdown_kill:
+            self.killed = True
+
+        # 4. Calculate Reward (Differential Sharpe Ratio)
         step_return = (current_equity - self.equity_history[-2]) / (self.equity_history[-2] + 1e-8)
         self.returns_history.append(step_return)
 
         equity_ratio = current_equity / self.initial_capital
-        reward = self.reward_fn.compute(step_return, friction_paid, equity_ratio)
+        reward = self.reward_fn.compute(step_return, friction_paid, equity_ratio, trade_executed)
 
-        # 4. Step Management
+        # 5. Step Management
         self.current_step += 1
         terminated = self.current_step >= len(self.df) - 1
         truncated = False
@@ -198,24 +244,27 @@ class TradingEnv(gym.Env):
 
         info = {
             "equity": current_equity,
-            "drawdown": (self.peak_equity - current_equity) / (self.peak_equity + 1e-8),
+            "drawdown": current_dd,
             "position": self.position_pct,
             "step_return": step_return,
+            "killed": self.killed,
         }
 
         return obs, reward, terminated, truncated, info
 
     def _get_obs(self) -> np.ndarray:
         """
-        Professional observation builder.
-        - Uses LATEST row of features (not flattened window)
-        - No destructive z-scoring that kills trend signals
-        - Portfolio state includes holding duration
+        Leakage-free observation builder.
+
+        CRITICAL FIX: Uses features at (current_step - 1) to ensure
+        the agent only sees data from COMPLETED bars, not the bar
+        it is about to trade on.
         """
+        # Use previous step's features (the last COMPLETED bar)
+        obs_step = max(0, self.current_step - 1)
+
         if self.feature_columns:
-            # Use only the latest row — let LSTM/recurrence handle temporal patterns
-            latest = self.df.iloc[self.current_step][self.feature_columns].values.astype(np.float32)
-            # Replace any NaN/inf with 0
+            latest = self.df.iloc[obs_step][self.feature_columns].values.astype(np.float32)
             latest = np.nan_to_num(latest, nan=0.0, posinf=0.0, neginf=0.0)
         else:
             latest = np.zeros(1, dtype=np.float32)
@@ -223,7 +272,8 @@ class TradingEnv(gym.Env):
         # Portfolio state
         unrealized = 0.0
         if self.entry_price > 0:
-            unrealized = (self.df.iloc[self.current_step]['close'] - self.entry_price) / self.entry_price
+            price_prev = self.df.iloc[obs_step]['close']
+            unrealized = (price_prev - self.entry_price) / (self.entry_price + 1e-8)
 
         dd = (self.peak_equity - self.equity_history[-1]) / (self.peak_equity + 1e-8)
 
@@ -231,7 +281,7 @@ class TradingEnv(gym.Env):
             self.position_pct,
             unrealized,
             dd,
-            self.steps_since_entry / 20.0,  # Normalized holding duration
+            self.steps_since_entry / 20.0,
         ], dtype=np.float32)
 
         obs = np.concatenate([latest, portfolio_state])
@@ -246,7 +296,8 @@ class TradingEnv(gym.Env):
     def get_trade_stats(self) -> Dict:
         return {
             "total_trades": len(self.trade_log),
-            "total_costs": sum([t.get("cost", 0) for t in self.trade_log])
+            "total_costs": sum([t.get("cost", 0) for t in self.trade_log]),
+            "killed": self.killed,
         }
 
     def get_trade_log(self) -> list:

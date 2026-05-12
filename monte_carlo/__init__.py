@@ -1,1 +1,1 @@
-from monte_carlo.simulator import MonteCarloSimulator
+from .simulator import MonteCarloSimulator

@@ -1,1 +1,1 @@
-from env.trading_env import TradingEnv
+from .trading_env import TradingEnv

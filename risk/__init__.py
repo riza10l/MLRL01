@@ -1,1 +1,1 @@
-from risk.risk_manager import RiskManager
+from .risk_manager import RiskManager

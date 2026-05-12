@@ -1,5 +1,13 @@
 """
-Training Script for ML models and RL agent.
+Training Script V4 — Leakage-Free Pipeline
+============================================
+FIXES:
+  - Scaler fit on TRAIN only (was correct, preserved)
+  - Added embargo gap between train/test
+  - Walk-forward with purge/embargo
+  - Proper feature column management
+
+"ill keep evolving till i die" ahh machine
 """
 
 import os
@@ -30,14 +38,23 @@ from risk.risk_manager import RiskManager
 
 SCALED_MODELS = {"Logistic Regression", "SVM"}
 
+# Embargo size: max rolling window used in features
+EMBARGO_BARS = 60
+
 
 def load_latest_data(data_dir="../jupiter"):
-    """Auto-load file dataXX.csv terbaru."""
+    """Auto-load file dataXX.csv terbaru (numeric suffix only)."""
     pattern = os.path.join(data_dir, "data*.csv")
     files = glob.glob(pattern)
     if not files:
         raise FileNotFoundError(f"No data files found in {data_dir}")
-    latest = max(files, key=os.path.getctime)
+    # Filter to only dataNN.csv (numeric suffix), exclude data_saham etc
+    numbered = [f for f in files if re.search(r'data\d+\.csv$', os.path.basename(f))]
+    if numbered:
+        # Pick highest numbered file
+        latest = max(numbered, key=lambda f: int(re.search(r'data(\d+)\.csv$', os.path.basename(f)).group(1)))
+    else:
+        latest = max(files, key=os.path.getctime)
     print(f"[DATA] Using file: {latest}")
     df = pd.read_csv(latest)
     df.columns = df.columns.str.strip().str.lower()
@@ -48,19 +65,36 @@ def load_latest_data(data_dir="../jupiter"):
     return df
 
 
-def split_data(df, feature_cols, train_ratio=0.80):
-    """Split time-series data."""
+def split_data(df, feature_cols, train_ratio=0.80, embargo=EMBARGO_BARS):
+    """
+    Split time-series data with EMBARGO gap.
+
+    The embargo removes `embargo` bars between train and test
+    to prevent rolling indicator contamination.
+    """
     split_idx = int(len(df) * train_ratio)
+
+    # Apply embargo: skip `embargo` bars after train end
+    test_start = split_idx + embargo
+
+    if test_start >= len(df):
+        print(f"[WARN] Embargo ({embargo}) exceeds remaining data. Reducing.")
+        test_start = split_idx + 10
+
     X = df[feature_cols]
     y = df["target"]
-    X_train, X_test = X.iloc[:split_idx], X.iloc[split_idx:]
-    y_train, y_test = y.iloc[:split_idx], y.iloc[split_idx:]
-    dates_test = df["date"].iloc[split_idx:].reset_index(drop=True)
-    close_test = df["close"].iloc[split_idx:].reset_index(drop=True)
+
+    X_train, X_test = X.iloc[:split_idx], X.iloc[test_start:]
+    y_train, y_test = y.iloc[:split_idx], y.iloc[test_start:]
+    dates_test = df["date"].iloc[test_start:].reset_index(drop=True)
+    close_test = df["close"].iloc[test_start:].reset_index(drop=True)
+
+    # Scaler fitted on TRAIN only
     scaler = StandardScaler()
     X_train_sc = scaler.fit_transform(X_train)
     X_test_sc = scaler.transform(X_test)
-    print(f"[SPLIT] Train: {len(X_train):,} | Test: {len(X_test):,}")
+
+    print(f"[SPLIT] Train: {len(X_train):,} | Embargo: {embargo} bars | Test: {len(X_test):,}")
     return X_train, X_test, y_train, y_test, X_train_sc, X_test_sc, dates_test, close_test, scaler
 
 
@@ -96,6 +130,13 @@ def train_ml_models(X_train, X_test, y_train, y_test, X_train_sc, X_test_sc):
         rec = recall_score(y_test, y_pred, zero_division=0)
         results.append({"Model": name, "Accuracy": acc, "Precision": prec, "Recall": rec})
         print(f"  {name:<22} acc={acc:.4f} prec={prec:.4f} rec={rec:.4f}")
+
+    # Sanity check: warn if any model > 60% accuracy
+    for r in results:
+        if r["Accuracy"] > 0.60:
+            print(f"  [WARN] {r['Model']} accuracy={r['Accuracy']:.1%} — "
+                  f"suspiciously high for daily prediction. Check for leakage!")
+
     results_df = pd.DataFrame(results).sort_values("Accuracy", ascending=False).reset_index(drop=True)
     results_df.index += 1
     return predictions, results_df, trained
@@ -111,12 +152,17 @@ def train_rl_agent(df_train, feature_cols, timesteps=100_000, use_lstm=False, sa
     return agent
 
 
-def walk_forward_validation(df, feature_cols, train_years=2, test_years=1, step_years=1):
+def walk_forward_validation(df, feature_cols, train_years=3, test_years=1,
+                           step_years=1, embargo=EMBARGO_BARS):
     """
-    Prioritas 4: Walk-Forward Validation.
-    Slides window forward to test consistency across regimes.
+    Walk-Forward Validation with Purge & Embargo.
+
+    FIXES:
+      - Embargo gap between train/test to prevent rolling window contamination
+      - Scaler fitted per fold on train data only
+      - Longer default train window (3 years vs 2)
     """
-    print("\n[WALK-FORWARD] Starting walk-forward validation...")
+    print("\n[WALK-FORWARD] Starting purged walk-forward validation...")
     df = df.copy()
     df["date"] = pd.to_datetime(df["date"])
     min_year = df["date"].dt.year.min()
@@ -132,18 +178,24 @@ def walk_forward_validation(df, feature_cols, train_years=2, test_years=1, step_
         train_mask = (df["date"].dt.year >= start_year) & (df["date"].dt.year < train_end_year)
         test_mask = (df["date"].dt.year >= train_end_year) & (df["date"].dt.year < test_end_year)
 
-        df_train = df[train_mask].reset_index(drop=True)
-        df_test = df[test_mask].reset_index(drop=True)
+        df_train_raw = df[train_mask].reset_index(drop=True)
+        df_test_raw = df[test_mask].reset_index(drop=True)
 
-        if len(df_train) < 100 or len(df_test) < 30:
+        if len(df_train_raw) < 200 or len(df_test_raw) < 50:
+            continue
+
+        # Apply embargo: remove first `embargo` bars from test
+        df_test = df_test_raw.iloc[embargo:].reset_index(drop=True)
+        if len(df_test) < 30:
             continue
 
         fold += 1
-        print(f"\n  Fold {fold}: Train {start_year}-{train_end_year-1} | Test {train_end_year}-{test_end_year-1}")
-        print(f"    Train rows: {len(df_train):,} | Test rows: {len(df_test):,}")
+        print(f"\n  Fold {fold}: Train {start_year}-{train_end_year-1} | "
+              f"Test {train_end_year}-{test_end_year-1} (embargo={embargo})")
+        print(f"    Train rows: {len(df_train_raw):,} | Test rows: {len(df_test):,}")
 
         # Train RL
-        env_train = TradingEnv(df_train, feature_columns=feature_cols)
+        env_train = TradingEnv(df_train_raw, feature_columns=feature_cols)
         agent = PPOAgent(env_train, verbose=0)
         agent.train(total_timesteps=50_000)
 
@@ -155,6 +207,7 @@ def walk_forward_validation(df, feature_cols, train_years=2, test_years=1, step_
         metrics["fold"] = fold
         metrics["train_period"] = f"{start_year}-{train_end_year-1}"
         metrics["test_period"] = f"{train_end_year}-{test_end_year-1}"
+        metrics["embargo"] = embargo
         fold_results.append(metrics)
 
         print(f"    Return: {metrics['total_return']:+.2%} | "
@@ -165,9 +218,11 @@ def walk_forward_validation(df, feature_cols, train_years=2, test_years=1, step_
         summary = pd.DataFrame(fold_results)
         avg_sharpe = summary["sharpe_ratio"].mean()
         std_sharpe = summary["sharpe_ratio"].std()
+        avg_return = summary["total_return"].mean()
         print(f"\n[WALK-FORWARD] Summary: {len(fold_results)} folds")
+        print(f"  Avg Return: {avg_return:+.2%}")
         print(f"  Avg Sharpe: {avg_sharpe:.3f} +/- {std_sharpe:.3f}")
-        print(f"  Sharpe stabil? {'YES' if std_sharpe < 0.5 else 'PERLU REVIEW'}")
+        print(f"  Sharpe stable? {'YES' if std_sharpe < 0.5 else 'NEEDS REVIEW'}")
         return summary
     else:
         print("[WALK-FORWARD] Not enough data for walk-forward validation")
