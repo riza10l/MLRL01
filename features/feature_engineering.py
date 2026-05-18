@@ -1,11 +1,3 @@
-"""
-Feature Engineering Pipeline (V4 — Leakage-Free)
-==================================================
-Thin wrapper around features.py for backward compatibility.
-All actual feature logic is in features.py.
-
-"ill keep evolving till i die" ahh machine
-"""
 
 import numpy as np
 import pandas as pd
@@ -15,29 +7,23 @@ from .indicators import (
     add_trend_strength, add_volume_zscore, add_macd, add_bollinger_bands,
     add_sma_crossover_signal,
 )
+from .features import build_production_features, robust_normalize, get_production_feature_columns
 
+def build_all_features(
+    df: pd.DataFrame,
+    include_advanced: bool = True,
+    horizon: int = 5,
+    threshold: float = 0.005,
+    normalize: bool = False,
+) -> pd.DataFrame:
 
-def build_all_features(df: pd.DataFrame, include_advanced: bool = True) -> pd.DataFrame:
-    """
-    Build features from raw OHLCV using indicator functions.
-    ALL indicators now use shift(1) internally — no lookahead.
-
-    Args:
-        df: DataFrame with columns [date, open, high, low, close, volume]
-        include_advanced: If True, add RSI, ATR, MACD, etc.
-
-    Returns:
-        DataFrame with all features + target column
-    """
     df = df.copy()
 
-    # ── Basic Features ────────────────────────────────────────
     df = add_returns(df)
     df = add_range(df)
     df = add_moving_averages(df)
     df = add_volatility(df)
 
-    # ── Advanced Features ─────────────────────────────────────
     if include_advanced:
         df = add_rsi(df, periods=[7, 14])
         df = add_atr(df, period=14)
@@ -49,40 +35,64 @@ def build_all_features(df: pd.DataFrame, include_advanced: bool = True) -> pd.Da
         df = add_bollinger_bands(df)
         df = add_sma_crossover_signal(df)
 
-    # ── Target: multi-day forward return (NO shift(-1) leakage) ──
-    # Use 5-day forward return with 0.5% threshold
-    horizon = 5
     future_ret = df["close"].shift(-horizon) / df["close"] - 1
-    df["target"] = (future_ret > 0.005).astype(int)
+    df["target"] = (future_ret > threshold).astype(int)
 
-    # ── Clean NaN ─────────────────────────────────────────────
     df.dropna(inplace=True)
     df.reset_index(drop=True, inplace=True)
 
-    print(f"[FEAT] Total features: {len(get_feature_columns(df))} | Rows: {len(df):,}")
+    feat_cols = get_feature_columns(df)
+
+    if normalize:
+        df = robust_normalize(df, feat_cols)
+
+    print(f"[FEAT] Total features: {len(feat_cols)} | Rows: {len(df):,} | "
+          f"horizon={horizon}d | target_mean={df['target'].mean():.2%}")
+    return df
+
+
+def build_features(
+    df: pd.DataFrame,
+    horizon: int = 5,
+    threshold: float = 0.005,
+    method: str = "triple_barrier",
+    normalize: bool = False,
+) -> pd.DataFrame:
+    df = build_production_features(
+        df,
+        target_horizon=horizon,
+        target_threshold=threshold,
+        target_method=method,
+    )
+
+    if normalize:
+        feat_cols = get_production_feature_columns(df)
+        df = robust_normalize(df, feat_cols)
+
     return df
 
 
 def get_feature_columns(df: pd.DataFrame) -> list:
-    """Get list of feature columns (exclude date, target, OHLCV, non-numeric)."""
-    exclude = {"date", "open", "high", "low", "close", "volume", "target",
-               "target_return", "future_return", "log_return", "sma_cross_signal"}
+    exclude = {
+        "date", "open", "high", "low", "close", "volume",
+        "target", "target_return", "future_return",
+    }
     return [c for c in df.columns if c not in exclude and pd.api.types.is_numeric_dtype(df[c])]
 
 
 def get_basic_feature_columns() -> list:
-    """Feature columns from basic indicators."""
     return ["return", "range", "ma10", "ma50", "volatility",
             "ma10_ma50_diff", "vol_ma10", "price_ma10"]
 
 
-def get_advanced_feature_columns() -> list:
-    """All feature columns including advanced."""
-    basic = get_basic_feature_columns()
-    advanced = [
-        "rsi_14", "rsi_7", "atr_14", "rolling_vol_20",
+def get_advanced_feature_columns(df: pd.DataFrame = None) -> list:
+    if df is not None:
+        return get_feature_columns(df)
+    return get_basic_feature_columns() + [
+        "log_return",
+        "rsi_7", "rsi_14", "atr_14", "rolling_vol_20",
         "ma_slope_10", "ma_slope_50", "trend_strength", "volume_zscore",
         "macd", "macd_signal", "macd_hist",
         "bollinger_upper", "bollinger_lower", "bollinger_pct",
+        "sma_cross_signal",
     ]
-    return basic + advanced

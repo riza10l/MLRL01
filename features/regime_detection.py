@@ -1,35 +1,17 @@
-"""
-Regime Detection
-=================
-Prioritas 6: Regime Awareness (bull/bear, high_vol/low_vol)
-Prioritas 10: HMM Regime Detection (Hidden Markov Model)
-
-"ill keep evolving till i die" ahh machine
-"""
 
 import numpy as np
 import pandas as pd
 
-
-# ── Prioritas 6: Simple Regime Detection ──────────────────────
-
 def detect_trend_regime(df: pd.DataFrame, lookback: int = 50) -> pd.DataFrame:
-    """
-    Deteksi regime berdasarkan trend:
-    - bullish: close > MA(lookback)
-    - bearish: close < MA(lookback)
-    """
+    
     df = df.copy()
     ma = df["close"].rolling(lookback).mean()
     df["trend_regime"] = np.where(df["close"] > ma, 1, 0)  # 1=bullish, 0=bearish
     df["trend_regime_label"] = np.where(df["trend_regime"] == 1, "bullish", "bearish")
     return df
 
-
 def detect_volatility_regime(df: pd.DataFrame, lookback: int = 20, threshold_quantile: float = 0.7) -> pd.DataFrame:
-    """
-    Deteksi regime berdasarkan volatility.
-    """
+    
     df = df.copy()
     # Fill NaN returns with 0 to avoid cascade NaNs in rolling std
     returns = df["close"].pct_change().fillna(0)
@@ -52,11 +34,8 @@ def detect_volatility_regime(df: pd.DataFrame, lookback: int = 20, threshold_qua
     df["regime_vol_value"] = rolling_vol.fillna(0)
     return df
 
-
 def detect_combined_regime(df: pd.DataFrame, trend_lookback: int = 50, vol_lookback: int = 20) -> pd.DataFrame:
-    """
-    Combined regime: sideways, steady_up, crash, volatile_rally.
-    """
+    
     df = detect_trend_regime(df, trend_lookback)
     df = detect_volatility_regime(df, vol_lookback)
     df["combined_regime"] = df["trend_regime"] + df["vol_regime"] * 2
@@ -66,14 +45,8 @@ def detect_combined_regime(df: pd.DataFrame, trend_lookback: int = 50, vol_lookb
     df["hmm_regime"] = df["combined_regime"]
     return df
 
-
-# ── Prioritas 10: Statistical Regime Detection (HMM Alternative) ───────────────────────
-
 def detect_statistical_regime(df: pd.DataFrame, n_states: int = 3, lookback: int = 50) -> pd.DataFrame:
-    """
-    Statistical regime detection tanpa HMM - pake clustering sederhana.
-    Lebih robust dan ga butuh compiler.
-    """
+    
     df = df.copy()
     
     # Ensure we have return and volatility features
@@ -143,16 +116,9 @@ def detect_statistical_regime(df: pd.DataFrame, n_states: int = 3, lookback: int
     df = detect_combined_regime(df)
     return df
 
-
 def add_regime_features(df: pd.DataFrame, method: str = "volatility_trend",
                         n_hmm_states: int = 3) -> pd.DataFrame:
-    """
-    Main entry point: add regime features ke dataframe.
     
-    Args:
-        method: "volatility_trend" atau "statistical" (replaces "hmm")
-        n_hmm_states: jumlah states buat statistical regime (3 atau 4)
-    """
     if method == "hmm" or method == "statistical":
         # Use statistical regime (no compiler needed)
         df = detect_statistical_regime(df, n_states=n_hmm_states)

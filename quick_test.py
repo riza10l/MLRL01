@@ -1,9 +1,3 @@
-"""
-Quick Test Script (V4)
-=======================
-Test the V4 leakage-free pipeline without full training.
-Validates: features, env, Monte Carlo, anomaly detection.
-"""
 
 import os
 import sys

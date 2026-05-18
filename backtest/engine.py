@@ -1,20 +1,9 @@
-"""
-Backtest Engine V4 — Realistic Execution
-==========================================
-FIXES:
-  - Realistic spread/slippage/fee modeling
-  - Execution delay (enter at next bar open, not close)
-  - Proper PnL tracking with friction
-  - Anomaly detection for corrupted candles
-
-"ill keep evolving till i die" ahh machine
-"""
+#backtest mesin mk4
 
 import numpy as np
 import pandas as pd
 from risk.risk_manager import RiskManager
 from backtest.metrics import BacktestMetrics
-
 
 class BacktestEngine:
     def __init__(self, initial_capital=100_000, stop_loss=0.01,
@@ -29,7 +18,7 @@ class BacktestEngine:
         self.total_cost_rate = fee + spread + slippage
 
     def run_ml_backtest(self, predictions, close_test, dates_test=None):
-        """Backtest all ML model signals. Returns dict of {name: metrics}."""
+        
         results = {}
         print("\n[BACKTEST] Running realistic ML backtests...")
         for name, preds in predictions.items():
@@ -43,14 +32,7 @@ class BacktestEngine:
         return results
 
     def _backtest_single(self, preds, closes):
-        """
-        Realistic single-model backtest.
-
-        FIXES:
-          - Entry at NEXT bar's price (execution delay)
-          - Friction applied on both entry and exit
-          - Stop-loss and take-profit checked against entry
-        """
+        
         cap = self.initial_capital
         pos = 0
         entry = 0.0
@@ -120,11 +102,7 @@ class BacktestEngine:
 
     @staticmethod
     def detect_anomalous_candles(df, zscore_threshold=5.0):
-        """
-        Detect anomalous candles that may corrupt backtest results.
-
-        Returns mask of clean (non-anomalous) rows.
-        """
+        
         anomalies = []
 
         # Check for zero/negative prices

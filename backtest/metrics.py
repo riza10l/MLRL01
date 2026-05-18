@@ -1,23 +1,13 @@
-"""
-Backtest Metrics
-"""
+#backtest metrics nya
 
 import numpy as np
 import pandas as pd
 from risk.risk_manager import RiskManager
 
-
 class BacktestMetrics:
-    """Compute and format all backtest metrics."""
-
     @staticmethod
     def compute(equity_curve, trades_pnl=None, initial_capital=100_000,
                 total_costs=0.0, n_trades=0):
-        """
-        Compute full metrics from equity curve.
-        
-        Returns dict with all metrics.
-        """
         equity = np.asarray(equity_curve)
         returns = np.diff(equity) / (equity[:-1] + 1e-10)
 
@@ -31,7 +21,6 @@ class BacktestMetrics:
 
     @staticmethod
     def format_metrics(metrics: dict) -> str:
-        """Pretty print metrics."""
         lines = []
         lines.append(f"  Return:     {metrics.get('total_return', 0):+.2%}")
         lines.append(f"  Ann Return: {metrics.get('annualized_return', 0):+.2%}")
@@ -50,9 +39,6 @@ class BacktestMetrics:
 
     @staticmethod
     def compare_table(results: dict) -> pd.DataFrame:
-        """
-        Create comparison DataFrame from dict of {name: metrics}.
-        """
         rows = []
         for name, m in results.items():
             rows.append({

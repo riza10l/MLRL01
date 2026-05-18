@@ -1,12 +1,9 @@
-"""
-Benchmarks for strategy evaluation.
-"""
+#Benchmark buat model
 
 import numpy as np
 import pandas as pd
 from risk.risk_manager import RiskManager
 from backtest.metrics import BacktestMetrics
-
 
 class BenchmarkRunner:
     def __init__(self, df, initial_capital=100_000,

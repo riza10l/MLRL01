@@ -1,37 +1,11 @@
-"""
-Features V4 — Leakage-Free Professional Feature Engineering
-=============================================================
-CRITICAL RULES:
-  1. ALL features use shift(1) — only past data available at decision time
-  2. NO future information via shift(-N)
-  3. Target uses explicit forward-looking window with proper isolation
-  4. feature columns exclude ALL target-related and raw price columns
-
-"ill keep evolving till i die" ahh machine
-"""
 
 import numpy as np
 import pandas as pd
 from typing import List, Tuple
 
-
-# ═══════════════════════════════════════════════════════════════
-#  TARGET ENGINEERING — Triple Barrier Labeling
-# ═══════════════════════════════════════════════════════════════
-
 def create_target(df: pd.DataFrame, horizon: int = 5,
                   threshold: float = 0.005, method: str = "triple_barrier") -> pd.DataFrame:
-    """
-    Professional target labeling. All methods produce forward-looking labels
-    that are STRICTLY isolated from features.
 
-    Methods:
-      - triple_barrier: ATR-adjusted barriers (institutional standard)
-      - threshold: fixed percentage threshold
-      - binary: simple up/down
-
-    Returns df with 'target' column (0 or 1) and 'target_return' (continuous).
-    """
     df = df.copy()
 
     if method == "triple_barrier":
@@ -52,17 +26,8 @@ def create_target(df: pd.DataFrame, horizon: int = 5,
 
     return df
 
-
 def _triple_barrier_target(df: pd.DataFrame, horizon: int = 5,
                            atr_mult: float = 1.5) -> pd.DataFrame:
-    """
-    Triple Barrier Labeling (de Prado, 2018).
-    - Upper barrier: +atr_mult * ATR (take profit)
-    - Lower barrier: -atr_mult * ATR (stop loss)
-    - Vertical barrier: horizon bars (time limit)
-
-    Label: 1 if upper barrier hit first, 0 otherwise.
-    """
     closes = df['close'].values
     highs = df['high'].values
     lows = df['low'].values
@@ -120,31 +85,17 @@ def _triple_barrier_target(df: pd.DataFrame, horizon: int = 5,
 
     return df
 
-
-# ═══════════════════════════════════════════════════════════════
-#  CORE FEATURE PIPELINE — Leakage-Free
-# ═══════════════════════════════════════════════════════════════
-
 def build_production_features(df: pd.DataFrame,
                                target_horizon: int = 5,
                                target_threshold: float = 0.005,
                                target_method: str = "triple_barrier") -> pd.DataFrame:
-    """
-    V4 Leakage-Free Feature Engineering Pipeline.
-
-    RULES:
-      - ALL features use shift(1) where they reference current-bar OHLCV
-      - This ensures features only contain information available BEFORE
-        the trading decision is made (at market open)
-      - Target is computed separately and never mixed into features
-    """
     df = df.copy()
 
     # Ensure date column exists and is datetime
     if 'date' in df.columns:
         df['date'] = pd.to_datetime(df['date'])
 
-    # ── STEP 1: Compute raw intermediates (no shift yet) ──────
+    #  STEP 1: Compute raw intermediates (no shift yet) 
     # These are helper columns; final features will use shift(1)
 
     close = df['close']
@@ -158,7 +109,7 @@ def build_production_features(df: pd.DataFrame,
     low_prev = low.shift(1)
     volume_prev = volume.shift(1)
 
-    # ── STEP 2: ATR (using shift(1) — only past data) ────────
+    #  STEP 2: ATR (using shift(1) — only past data) 
     tr = pd.concat([
         high_prev - low_prev,
         (high_prev - close.shift(2)).abs(),
@@ -166,12 +117,12 @@ def build_production_features(df: pd.DataFrame,
     ], axis=1).max(axis=1)
     df['atr_14'] = tr.rolling(14, min_periods=1).mean()
 
-    # ── STEP 3: Returns (using shift(1)) ─────────────────────
+    #  STEP 3: Returns (using shift(1)) 
     df['ret_1d'] = close_prev.pct_change(1)
     df['ret_5d'] = close_prev.pct_change(5)
     df['ret_20d'] = close_prev.pct_change(20)
 
-    # ── STEP 4: Trend Features ───────────────────────────────
+    #  STEP 4: Trend Features 
     ema20 = close_prev.ewm(span=20, adjust=False).mean()
     ema50 = close_prev.ewm(span=50, adjust=False).mean()
     df['close_vs_ema20'] = (close_prev - ema20) / (df['atr_14'] + 1e-8)
@@ -180,22 +131,22 @@ def build_production_features(df: pd.DataFrame,
     df['ema_slope_50'] = ema50.pct_change(10)
     df['trend_strength'] = (ema20 - ema50).abs() / (df['atr_14'] + 1e-8)
 
-    # ── STEP 5: ADX (using shift(1) data) ────────────────────
+    #  STEP 5: ADX (using shift(1) data)
     df = _add_adx(df, period=14)
 
-    # ── STEP 6: Trend Persistence ────────────────────────────
+    #  STEP 6: Trend Persistence 
     ret_series = df['ret_1d']
     df['up_streak'] = _streak_count(ret_series > 0)
     df['down_streak'] = _streak_count(ret_series < 0)
     df['trend_persistence'] = df['up_streak'] - df['down_streak']
 
-    # ── STEP 7: Volatility Regime ────────────────────────────
+    #  STEP 7: Volatility Regime 
     df['rvol_20'] = df['ret_1d'].rolling(20).std() * np.sqrt(252)
     df['rvol_60'] = df['ret_1d'].rolling(60).std() * np.sqrt(252)
     df['vol_ratio'] = df['rvol_20'] / (df['rvol_60'] + 1e-8)
     df['vol_percentile'] = df['rvol_20'].rolling(252, min_periods=60).rank(pct=True)
 
-    # ── STEP 8: Mean Reversion ───────────────────────────────
+    #  STEP 8: Mean Reversion 
     ma20 = close_prev.rolling(20).mean()
     std20 = close_prev.rolling(20).std()
     df['bb_zscore'] = (close_prev - ma20) / (std20 + 1e-8)
@@ -204,7 +155,7 @@ def build_production_features(df: pd.DataFrame,
               (volume_prev.rolling(20).sum() + 1e-8)
     df['vwap_dist'] = (close_prev - vwap_20) / (df['atr_14'] + 1e-8)
 
-    # ── STEP 9: Momentum Quality ─────────────────────────────
+    #  STEP 9: Momentum Quality 
     df['rsi_14'] = _compute_rsi(close_prev, 14)
     df['rsi_14_norm'] = (df['rsi_14'] - 50) / 50
 
@@ -215,11 +166,11 @@ def build_production_features(df: pd.DataFrame,
     df['macd_norm'] = macd / (df['atr_14'] + 1e-8)
     df['macd_hist_norm'] = (macd - macd_signal) / (df['atr_14'] + 1e-8)
 
-    # ── STEP 10: Higher-Order Statistics ─────────────────────
+    #  STEP 10: Higher-Order Statistics 
     df['skew_20'] = df['ret_1d'].rolling(20).skew()
     df['kurt_20'] = df['ret_1d'].rolling(20).kurt()
 
-    # ── STEP 11: Market Structure ────────────────────────────
+    #  STEP 11: Market Structure 
     rolling_high_20 = high_prev.rolling(20).max()
     rolling_low_20 = low_prev.rolling(20).min()
     price_range = rolling_high_20 - rolling_low_20
@@ -230,13 +181,13 @@ def build_production_features(df: pd.DataFrame,
     df['ll_streak'] = (low_prev < low_prev.shift(1)).astype(float).rolling(5).sum()
     df['breakout_vol'] = (volume_prev > volume_prev.rolling(20).mean() * 1.5).astype(float)
 
-    # ── STEP 12: Volume Regime ───────────────────────────────
+    #  STEP 12: Volume Regime 
     vol_mean = volume_prev.rolling(20).mean()
     vol_std = volume_prev.rolling(20).std()
     df['volume_zscore'] = (volume_prev - vol_mean) / (vol_std + 1e-8)
     df['vol_trend'] = volume_prev.rolling(5).mean() / (vol_mean + 1e-8)
 
-    # ── STEP 13: Multi-Timeframe (simulated weekly) ──────────
+    #  STEP 13: Multi-Timeframe (simulated weekly)
     df['weekly_ret'] = close_prev.pct_change(5)
     df['weekly_trend'] = (close_prev.rolling(10).mean() > close_prev.rolling(40).mean()).astype(float)
     df['daily_weekly_align'] = (
@@ -245,17 +196,17 @@ def build_production_features(df: pd.DataFrame,
         (df['ema_slope_20'] < 0) & (df['weekly_trend'] == 0)
     ).astype(float)
 
-    # ── STEP 14: Signal Quality ──────────────────────────────
+    #  STEP 14: Signal Quality 
     df['tradeable_trend'] = (df['adx'] > 20).astype(float)
     df['tradeable_vol'] = ((df['vol_percentile'] > 0.2) & (df['vol_percentile'] < 0.85)).astype(float)
     df['signal_quality'] = df['tradeable_trend'] * df['tradeable_vol']
 
-    # ── STEP 15: Regime Detection ────────────────────────────
+    #  STEP 15: Regime Detection 
     df['regime_trending'] = ((df['ema_slope_20'] > 0.001) & (df['vol_percentile'] < 0.6)).astype(float)
     df['regime_volatile'] = ((df['vol_percentile'] > 0.8) | (df['ema_slope_20'] < -0.005)).astype(float)
     df['regime_sideways'] = (1 - df['regime_trending'] - df['regime_volatile']).clip(0, 1)
 
-    # ── STEP 16: Advanced Features ───────────────────────────
+    #  STEP 16: Advanced Features 
     # Rolling Sharpe (using past returns only)
     roll_mean = df['ret_1d'].rolling(20).mean()
     roll_std = df['ret_1d'].rolling(20).std()
@@ -280,11 +231,11 @@ def build_production_features(df: pd.DataFrame,
     sq_ret = df['ret_1d'] ** 2
     df['vol_cluster'] = sq_ret.ewm(span=10, adjust=False).mean() / (sq_ret.rolling(50).mean() + 1e-8)
 
-    # ── STEP 17: Target Engineering ──────────────────────────
+    #  STEP 17: Target Engineering 
     df = create_target(df, horizon=target_horizon,
                        threshold=target_threshold, method=target_method)
 
-    # ── STEP 18: Cleanup ─────────────────────────────────────
+    #  STEP 18: Cleanup 
     df = df.dropna(subset=['target']).reset_index(drop=True)
     # Drop rows where features are NaN (warm-up period)
     feature_cols = get_production_feature_columns(df)
@@ -296,13 +247,7 @@ def build_production_features(df: pd.DataFrame,
 
     return df
 
-
-# ═══════════════════════════════════════════════════════════════
-#  HELPER FUNCTIONS
-# ═══════════════════════════════════════════════════════════════
-
 def _add_adx(df: pd.DataFrame, period: int = 14) -> pd.DataFrame:
-    """Average Directional Index using shift(1) data."""
     high = df['high'].shift(1)
     low = df['low'].shift(1)
     close = df['close'].shift(2)  # Previous close relative to shift(1)
@@ -328,9 +273,7 @@ def _add_adx(df: pd.DataFrame, period: int = 14) -> pd.DataFrame:
 
     return df
 
-
 def _compute_rsi(series: pd.Series, period: int = 14) -> pd.Series:
-    """RSI calculation."""
     delta = series.diff()
     gain = delta.where(delta > 0, 0.0)
     loss = -delta.where(delta < 0, 0.0)
@@ -339,15 +282,11 @@ def _compute_rsi(series: pd.Series, period: int = 14) -> pd.Series:
     rs = avg_gain / (avg_loss + 1e-8)
     return 100 - (100 / (1 + rs))
 
-
 def _streak_count(condition: pd.Series) -> pd.Series:
-    """Count consecutive True values. Resets on False."""
     groups = (~condition).cumsum()
     return condition.groupby(groups).cumsum().astype(float)
 
-
 def _hurst_rs(data):
-    """Simplified Hurst exponent via R/S analysis."""
     n = len(data)
     if n < 10:
         return 0.5
@@ -359,12 +298,7 @@ def _hurst_rs(data):
         return 0.5
     return np.log(r / s) / np.log(n)
 
-
 def get_production_feature_columns(df: pd.DataFrame) -> list:
-    """
-    Get clean feature column list.
-    EXCLUDES: raw prices, target, future information, non-numeric.
-    """
     exclude = {
         # Raw OHLCV — never use as features
         "date", "open", "high", "low", "close", "volume",
@@ -377,13 +311,8 @@ def get_production_feature_columns(df: pd.DataFrame) -> list:
     return [c for c in df.columns
             if c not in exclude and pd.api.types.is_numeric_dtype(df[c])]
 
-
 def robust_normalize(df: pd.DataFrame, columns: List[str],
                      window: int = 100) -> pd.DataFrame:
-    """
-    Rolling Z-Score normalization (expanding, not lookahead).
-    Uses expanding window with minimum periods to avoid lookahead.
-    """
     df = df.copy()
     for col in columns:
         rolled = df[col].expanding(min_periods=20)

@@ -1,26 +1,9 @@
-"""
-Risk Manager V4 — Professional Risk Engine
-============================================
-Position sizing, drawdown tracking, kill switches,
-and all risk metrics.
-
-"ill keep evolving till i die" ahh machine
-"""
 
 import numpy as np
 import pandas as pd
 
-
 class RiskManager:
-    """
-    Professional risk management with:
-    - ATR-based position sizing
-    - Max daily loss tracking
-    - Kill switch on drawdown
-    - Consecutive loss tracking
-    - Exposure limits
-    """
-
+    
     def __init__(self, capital=100_000, risk_pct=0.02,
                  stop_loss_pct=0.01, max_drawdown=0.20,
                  max_daily_loss_pct=0.03,
@@ -43,18 +26,14 @@ class RiskManager:
         self.kill_reason = ""
 
     def position_size(self, stop_loss_amount):
-        """Berapa unit yang bisa dibeli berdasarkan risiko per trade."""
+        
         risk_amount = self.capital * self.risk_pct
         if stop_loss_amount <= 0:
             return 0
         return risk_amount / stop_loss_amount
 
     def position_size_atr(self, atr, contract_size=1.0):
-        """
-        ATR-based position sizing.
-        Risk = risk_pct * capital
-        Size = Risk / (ATR * contract_size)
-        """
+        
         if atr <= 0:
             return 0
         risk_amount = self.capital * self.risk_pct
@@ -62,11 +41,7 @@ class RiskManager:
         return min(size, self.max_exposure * self.capital)
 
     def kelly_fraction(self, win_rate, avg_win, avg_loss):
-        """
-        Kelly criterion for optimal bet sizing.
-        f* = (p * b - q) / b
-        where p = win probability, b = win/loss ratio, q = 1-p
-        """
+        
         if avg_loss == 0 or win_rate <= 0 or win_rate >= 1:
             return 0
         b = abs(avg_win / avg_loss)
@@ -76,13 +51,13 @@ class RiskManager:
         return max(0, min(f * 0.5, self.max_exposure))
 
     def update_equity(self, new_capital):
-        """Track equity dan update peak."""
+        
         self.capital = new_capital
         self.peak_capital = max(self.peak_capital, new_capital)
         self.equity_history.append(new_capital)
 
     def record_trade(self, pnl):
-        """Record trade result and update risk state."""
+        
         if pnl < 0:
             self.consecutive_losses += 1
         else:
@@ -94,11 +69,11 @@ class RiskManager:
             self.kill_reason = f"Consecutive losses: {self.consecutive_losses}"
 
     def new_day(self):
-        """Reset daily counters."""
+        
         self.daily_start_capital = self.capital
 
     def check_daily_loss(self):
-        """Check if daily loss limit is hit."""
+        
         daily_pnl = (self.capital - self.daily_start_capital) / self.daily_start_capital
         if daily_pnl <= -self.max_daily_loss_pct:
             self.killed = True
@@ -107,13 +82,13 @@ class RiskManager:
         return False
 
     def current_drawdown(self):
-        """Current drawdown from peak."""
+        
         if self.peak_capital <= 0:
             return 0
         return (self.peak_capital - self.capital) / self.peak_capital
 
     def should_stop_trading(self):
-        """Cek apakah drawdown sudah melebihi limit atau kill switch active."""
+        
         if self.killed:
             return True
         dd = self.current_drawdown()
@@ -124,7 +99,7 @@ class RiskManager:
         return False
 
     def get_risk_state(self):
-        """Get current risk state summary."""
+        
         return {
             "capital": self.capital,
             "peak": self.peak_capital,
@@ -134,11 +109,9 @@ class RiskManager:
             "kill_reason": self.kill_reason,
         }
 
-    # ── Static Metric Functions ───────────────────────────────
-
     @staticmethod
     def max_drawdown(equity_curve):
-        """Hitung Maximum Drawdown (%)."""
+        
         equity = np.asarray(equity_curve)
         peak = np.maximum.accumulate(equity)
         dd = (equity - peak) / (peak + 1e-10)
@@ -206,7 +179,7 @@ class RiskManager:
 
     @staticmethod
     def tail_ratio(returns, alpha=0.05):
-        """Ratio of right tail to left tail at given percentile."""
+        
         returns = np.asarray(returns)
         if len(returns) < 20:
             return 0.0

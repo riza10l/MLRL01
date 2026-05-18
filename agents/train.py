@@ -1,14 +1,3 @@
-"""
-Training Script V4 — Leakage-Free Pipeline
-============================================
-FIXES:
-  - Scaler fit on TRAIN only (was correct, preserved)
-  - Added embargo gap between train/test
-  - Walk-forward with purge/embargo
-  - Proper feature column management
-
-"ill keep evolving till i die" ahh machine
-"""
 
 import os
 import sys
@@ -41,9 +30,8 @@ SCALED_MODELS = {"Logistic Regression", "SVM"}
 # Embargo size: max rolling window used in features
 EMBARGO_BARS = 60
 
-
 def load_latest_data(data_dir="../jupiter"):
-    """Auto-load file dataXX.csv terbaru (numeric suffix only)."""
+    
     pattern = os.path.join(data_dir, "data*.csv")
     files = glob.glob(pattern)
     if not files:
@@ -64,14 +52,8 @@ def load_latest_data(data_dir="../jupiter"):
     print(f"[DATA] Rows: {len(df):,} | {df['date'].min().date()} -> {df['date'].max().date()}")
     return df
 
-
 def split_data(df, feature_cols, train_ratio=0.80, embargo=EMBARGO_BARS):
-    """
-    Split time-series data with EMBARGO gap.
-
-    The embargo removes `embargo` bars between train and test
-    to prevent rolling indicator contamination.
-    """
+    
     split_idx = int(len(df) * train_ratio)
 
     # Apply embargo: skip `embargo` bars after train end
@@ -97,7 +79,6 @@ def split_data(df, feature_cols, train_ratio=0.80, embargo=EMBARGO_BARS):
     print(f"[SPLIT] Train: {len(X_train):,} | Embargo: {embargo} bars | Test: {len(X_test):,}")
     return X_train, X_test, y_train, y_test, X_train_sc, X_test_sc, dates_test, close_test, scaler
 
-
 def get_ml_models():
     return {
         "Logistic Regression": LogisticRegression(max_iter=1000, random_state=42),
@@ -109,9 +90,8 @@ def get_ml_models():
         "SVM": SVC(kernel="rbf", probability=True, random_state=42),
     }
 
-
 def train_ml_models(X_train, X_test, y_train, y_test, X_train_sc, X_test_sc):
-    """Train ML models."""
+    
     from sklearn.metrics import accuracy_score, precision_score, recall_score
     models = get_ml_models()
     predictions = {}
@@ -141,9 +121,8 @@ def train_ml_models(X_train, X_test, y_train, y_test, X_train_sc, X_test_sc):
     results_df.index += 1
     return predictions, results_df, trained
 
-
 def train_rl_agent(df_train, feature_cols, timesteps=100_000, use_lstm=False, save_path=None):
-    """Train PPO agent on training data."""
+    
     env = TradingEnv(df_train, feature_columns=feature_cols)
     agent = PPOAgent(env, use_lstm=use_lstm)
     agent.train(total_timesteps=timesteps)
@@ -151,17 +130,9 @@ def train_rl_agent(df_train, feature_cols, timesteps=100_000, use_lstm=False, sa
         agent.save(save_path)
     return agent
 
-
 def walk_forward_validation(df, feature_cols, train_years=3, test_years=1,
                            step_years=1, embargo=EMBARGO_BARS):
-    """
-    Walk-Forward Validation with Purge & Embargo.
-
-    FIXES:
-      - Embargo gap between train/test to prevent rolling window contamination
-      - Scaler fitted per fold on train data only
-      - Longer default train window (3 years vs 2)
-    """
+    
     print("\n[WALK-FORWARD] Starting purged walk-forward validation...")
     df = df.copy()
     df["date"] = pd.to_datetime(df["date"])

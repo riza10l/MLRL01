@@ -1,20 +1,3 @@
-"""
-MLRL01 V4 — Leakage-Free Professional Quant Engine
-=====================================================
-Gold Futures (GC=F) — ML + RL System
-
-V4 FIXES:
-  - ALL data leakage eliminated
-  - Features use shift(1) — only past data
-  - Target uses triple barrier labeling
-  - Embargo gap between train/test
-  - Anomaly detection on raw data
-  - Block bootstrap Monte Carlo
-  - Realistic backtest with execution delay
-  - Kill switch on drawdown
-
-"ill keep evolving till i die" ahh machine
-"""
 
 import os
 import sys
@@ -45,7 +28,6 @@ from backtest.metrics import BacktestMetrics
 from risk.risk_manager import RiskManager
 from monte_carlo.simulator import MonteCarloSimulator
 
-
 # --- Configuration ---
 
 DATA_DIR        = "jupiter" if os.path.exists("jupiter") else "../jupiter"
@@ -70,7 +52,6 @@ SAVE_DIR_REPORTS = os.path.join(BASE_DIR, "results", "reports")
 SAVE_DIR_MC      = os.path.join(BASE_DIR, "results", "monte_carlo")
 MODEL_SAVE_DIR   = os.path.join(BASE_DIR, "models", "saved_models")
 
-
 def main():
     print("=" * 65)
     print("  MLRL01 V4 — LEAKAGE-FREE QUANT ENGINE")
@@ -80,10 +61,8 @@ def main():
     for d in [SAVE_DIR_PLOTS, SAVE_DIR_REPORTS, SAVE_DIR_MC, MODEL_SAVE_DIR]:
         os.makedirs(d, exist_ok=True)
 
-    # ── Load Data ─────────────────────────────────────────────
     df_raw = load_latest_data(DATA_DIR)
 
-    # ── Anomaly Detection ─────────────────────────────────────
     print("\n[ANOMALY] Scanning raw data for corrupted candles...")
     clean_mask = BacktestEngine.detect_anomalous_candles(df_raw)
     n_removed = (~clean_mask).sum()
@@ -91,7 +70,6 @@ def main():
         df_raw = df_raw[clean_mask].reset_index(drop=True)
         print(f"[ANOMALY] Removed {n_removed} anomalous rows")
 
-    # ── Feature Engineering (V4 — Leakage-Free) ──────────────
     print("\n[FEAT] Building V4 leakage-free features...")
     df = build_production_features(
         df_raw,
@@ -100,7 +78,6 @@ def main():
         target_method=TARGET_METHOD,
     )
 
-    # ── Feature Columns ──────────────────────────────────────
     feature_cols = get_production_feature_columns(df)
 
     print(f"\n[CONFIG] Features: {len(feature_cols)}")
@@ -110,19 +87,16 @@ def main():
     print(f"[CONFIG] Monte Carlo: {'ON' if RUN_MONTE_CARLO else 'OFF'} ({MC_SIMULATIONS} sims)")
     print(f"[CONFIG] Target distribution: {df['target'].mean():.1%} positive")
 
-    # ── Split Data (with Embargo) ────────────────────────────
     (X_train, X_test, y_train, y_test,
      X_train_sc, X_test_sc,
      dates_test, close_test, scaler) = split_data(df, feature_cols, TRAIN_RATIO)
 
-    # ── Train ML Models ──────────────────────────────────────
     predictions, results_df, trained_models = train_ml_models(
         X_train, X_test, y_train, y_test, X_train_sc, X_test_sc
     )
     print("\n[ML] Model Ranking (by Accuracy):")
     print(results_df.to_string())
 
-    # ── Leakage Sanity Check ─────────────────────────────────
     print("\n" + "=" * 65)
     print("  LEAKAGE SANITY CHECK")
     print("=" * 65)
@@ -134,7 +108,6 @@ def main():
     else:
         print(f"  [OK] Max accuracy = {max_acc:.1%} — realistic range")
 
-    # ── Train RL Agent ───────────────────────────────────────
     split_idx = int(len(df) * TRAIN_RATIO)
     df_train_slice = df.iloc[:split_idx].reset_index(drop=True)
     # Apply embargo for RL test data too
@@ -165,15 +138,12 @@ def main():
           f"Trades: {rl_metrics['n_trades']} | "
           f"Killed: {rl_stats.get('killed', False)}")
 
-    # ── Backtest ML Models ───────────────────────────────────
     bt_engine = BacktestEngine()
     bt_results = bt_engine.run_ml_backtest(predictions, close_test, dates_test)
 
-    # ── Run Benchmarks ───────────────────────────────────────
     benchmark_runner = BenchmarkRunner(df_test_slice)
     bm_results = benchmark_runner.run_all()
 
-    # ── Compare RL vs Benchmarks ─────────────────────────────
     print("\n" + "=" * 65)
     print("  RL vs BENCHMARKS COMPARISON")
     print("=" * 65)
@@ -185,7 +155,6 @@ def main():
     else:
         print(f"  RL Sharpe ({rl_sharpe:.3f}) <= Buy&Hold ({bh_sharpe:.3f}) -> NEEDS MORE WORK")
 
-    # ── Walk-Forward Validation ──────────────────────────────
     wf_results = pd.DataFrame()
     if RUN_WALK_FWD:
         wf_results = walk_forward_validation(
@@ -194,7 +163,6 @@ def main():
             embargo=EMBARGO_BARS,
         )
 
-    # ── Monte Carlo Simulation ───────────────────────────────
     if RUN_MONTE_CARLO:
         print("\n" + "=" * 65)
         print("  MONTE CARLO VALIDATION (V4: Block Bootstrap + Stress Test)")
@@ -240,7 +208,6 @@ def main():
         mc_df.to_csv(mc_path, index=False)
         print(f"\n  Report saved -> {mc_path}")
 
-    # ── Generate Charts ──────────────────────────────────────
     print("\n[CHARTS] Generating charts...")
 
     all_metrics = {}
@@ -259,7 +226,6 @@ def main():
     if not wf_results.empty:
         plot_walk_forward(wf_results, save_dir=SAVE_DIR_PLOTS)
 
-    # ── Save Reports ─────────────────────────────────────────
     print("\n[SAVE] Saving reports...")
     save_risk_summary(all_metrics, save_dir=SAVE_DIR_REPORTS)
     save_comparison_csv(results_df, bt_results, save_dir=SAVE_DIR_REPORTS)
@@ -269,7 +235,6 @@ def main():
         wf_results.to_csv(wf_path, index=False)
         print(f"  Saved -> {wf_path}")
 
-    # ── Final Summary ────────────────────────────────────────
     print("\n" + "=" * 65)
     print("  V4 AUDIT COMPLETE")
     print("=" * 65)
@@ -284,9 +249,8 @@ def main():
         print(f"  Leakage Status: REVIEW NEEDED")
     print("=" * 65)
 
-
 def _print_mc_report(report):
-    """Pretty-print a Monte Carlo report."""
+    
     print(f"    Sims: {report['n_simulations']}")
     print(f"    Mean Return: {report['mean_return']:+.2%}")
     print(f"    Median Return: {report['median_return']:+.2%}")
@@ -297,7 +261,6 @@ def _print_mc_report(report):
     print(f"    Worst MaxDD: {report['worst_max_dd']:.2%}")
     if 'mean_sharpe' in report:
         print(f"    Mean Sharpe: {report['mean_sharpe']:.3f}")
-
 
 if __name__ == "__main__":
     main()

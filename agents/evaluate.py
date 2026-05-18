@@ -1,6 +1,3 @@
-"""
-Evaluation Script for trained agents.
-"""
 
 import os
 import numpy as np
@@ -18,14 +15,12 @@ matplotlib.rcParams.update({
     "grid.alpha": 0.3,
 })
 
-
 def ensure_dir(path):
     os.makedirs(path, exist_ok=True)
 
-
 def plot_equity_curves(all_results, rl_equity=None, benchmark_results=None,
                        dates=None, capital=100_000, save_dir="../results/plots"):
-    """Plot equity curves for all strategies and benchmarks."""
+    
     ensure_dir(save_dir)
     fig, ax = plt.subplots(figsize=(16, 7))
 
@@ -61,9 +56,8 @@ def plot_equity_curves(all_results, rl_equity=None, benchmark_results=None,
     plt.close(fig)
     print(f"  Saved -> {path}")
 
-
 def plot_prediction_charts(predictions, dates_test, close_test, save_dir="../results/plots"):
-    """Plot model predictions vs actual price."""
+    
     ensure_dir(save_dir)
     for name, preds in predictions.items():
         safe_name = name.lower().replace(" ", "_")
@@ -82,9 +76,8 @@ def plot_prediction_charts(predictions, dates_test, close_test, save_dir="../res
         plt.close(fig)
         print(f"  Saved -> {path}")
 
-
 def plot_confusion_matrices(predictions, y_test, save_dir="../results/plots"):
-    """Grid confusion matrix."""
+    
     ensure_dir(save_dir)
     n = len(predictions)
     ncols = 4
@@ -105,9 +98,8 @@ def plot_confusion_matrices(predictions, y_test, save_dir="../results/plots"):
     plt.close(fig)
     print(f"  Saved -> {path}")
 
-
 def plot_accuracy_comparison(results_df, save_dir="../results/plots"):
-    """Bar chart accuracy."""
+    
     ensure_dir(save_dir)
     fig, ax = plt.subplots(figsize=(10, 5))
     colors = plt.cm.RdYlGn(np.linspace(0.3, 0.9, len(results_df)))
@@ -124,9 +116,8 @@ def plot_accuracy_comparison(results_df, save_dir="../results/plots"):
     plt.close(fig)
     print(f"  Saved -> {path}")
 
-
 def plot_walk_forward(wf_results, save_dir="../results/plots"):
-    """Walk-forward validation results chart."""
+    
     if wf_results.empty:
         return
     ensure_dir(save_dir)
@@ -149,9 +140,8 @@ def plot_walk_forward(wf_results, save_dir="../results/plots"):
     plt.close(fig)
     print(f"  Saved -> {path}")
 
-
 def save_risk_summary(all_metrics, save_dir="../results/reports"):
-    """Save risk summary CSV."""
+    
     ensure_dir(save_dir)
     from backtest.metrics import BacktestMetrics
     table = BacktestMetrics.compare_table(all_metrics)
@@ -162,9 +152,8 @@ def save_risk_summary(all_metrics, save_dir="../results/reports"):
     print(f"  Saved -> {path}")
     return table
 
-
 def save_comparison_csv(results_df, backtest_metrics, save_dir="../results/reports"):
-    """Merge ML accuracy + backtest metrics."""
+    
     ensure_dir(save_dir)
     merged = results_df.copy()
     bt_rows = []

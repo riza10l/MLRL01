@@ -1,27 +1,10 @@
-"""
-PPO Agent Wrapper
-==================
-Wrapper around Stable-Baselines3 PPO.
-Supports:
-- Prioritas 9: LSTM / Recurrent PPO (sb3-contrib)
-- Standard MlpPolicy
-- Custom hyperparameters
-
-"ill keep evolving till i die" ahh machine
-"""
 
 import os
 import numpy as np
 from stable_baselines3 import PPO
 
-
 class PPOAgent:
-    """
-    PPO Agent wrapper with support for:
-    - Standard MlpPolicy
-    - RecurrentPPO (LSTM) via sb3-contrib (Prioritas 9)
-    """
-
+    
     def __init__(
         self,
         env,
@@ -91,7 +74,7 @@ class PPOAgent:
             print(f"[AGENT] Using PPO ({policy})")
 
     def train(self, total_timesteps=100_000, progress_bar=False):
-        """Train the agent."""
+        
         print(f"[AGENT] Training PPO ({total_timesteps:,} timesteps)...")
         self.model.learn(
             total_timesteps=total_timesteps,
@@ -101,7 +84,7 @@ class PPOAgent:
         return self.model
 
     def predict(self, obs, state=None, episode_start=None, deterministic=True):
-        """Predict action from observation, handling LSTM states if needed."""
+        
         return self.model.predict(
             obs, 
             state=state, 
@@ -110,10 +93,7 @@ class PPOAgent:
         )
 
     def evaluate(self, env, n_episodes=1):
-        """
-        Run agent on environment and collect equity curve + stats.
-        Returns: equity_curve, trade_stats, trade_log (of the last episode)
-        """
+        
         all_equity = []
         all_stats = []
         all_logs = []
@@ -153,13 +133,13 @@ class PPOAgent:
         return all_equity[-1], all_stats[-1], all_logs[-1]
 
     def save(self, path):
-        """Save model to disk."""
+        
         os.makedirs(os.path.dirname(path) if os.path.dirname(path) else ".", exist_ok=True)
         self.model.save(path)
         print(f"[AGENT] Model saved -> {path}")
 
     def load(self, path, env=None):
-        """Load model from disk."""
+        
         if self.use_lstm:
             try:
                 from sb3_contrib import RecurrentPPO

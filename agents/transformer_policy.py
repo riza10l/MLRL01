@@ -1,9 +1,3 @@
-"""
-Transformer Encoder - Prioritas 11
-===================================
-Attention mechanism & long sequence understanding.
-Implementasi custom features extractor buat Stable Baselines 3.
-"""
 
 import gymnasium as gym
 import torch
@@ -11,9 +5,7 @@ import torch.nn as nn
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 
 class TransformerFeaturesExtractor(BaseFeaturesExtractor):
-    """
-    Transformer-based features extractor for RL observation sequences.
-    """
+    
     def __init__(self, observation_space: gym.Space, features_dim: int = 128, 
                  num_heads: int = 4, num_layers: int = 2, dropout: float = 0.1):
         # We assume the observation is flattened (window * n_features + portfolio_state)

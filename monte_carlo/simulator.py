@@ -1,15 +1,3 @@
-"""
-Monte Carlo Simulation V4 — Professional Grade
-================================================
-Methods:
-  - Block bootstrap (preserves serial correlation)
-  - Regime-aware simulation
-  - Return perturbation with variable noise
-  - Cost variation simulation
-  - Stress testing (tail scenarios)
-
-"ill keep evolving till i die" ahh machine
-"""
 
 import os
 import numpy as np
@@ -18,12 +6,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-
 class MonteCarloSimulator:
-    """
-    Professional Monte Carlo simulation for trading strategy validation.
-    """
-
+    
     def __init__(self, n_simulations: int = 1000, seed: int = 42):
         self.n_sims = n_simulations
         self.rng = np.random.RandomState(seed)
@@ -35,18 +19,7 @@ class MonteCarloSimulator:
     def run_block_bootstrap(self, daily_returns: np.ndarray,
                             block_size: int = 20,
                             initial_capital: float = 100_000) -> dict:
-        """
-        Block bootstrap — preserves serial correlation structure.
-
-        Instead of resampling individual returns (which destroys autocorrelation),
-        resample BLOCKS of consecutive returns. This is the institutional standard
-        for time-series MC simulation.
-
-        Args:
-            daily_returns: array of daily returns
-            block_size: size of each block (default 20 = ~1 month)
-            initial_capital: starting capital
-        """
+        
         if len(daily_returns) < block_size:
             return self._empty_result()
 
@@ -88,12 +61,7 @@ class MonteCarloSimulator:
     def run_regime_aware(self, daily_returns: np.ndarray,
                          volatility: np.ndarray = None,
                          initial_capital: float = 100_000) -> dict:
-        """
-        Regime-aware Monte Carlo.
-
-        Classifies returns into high-vol and low-vol regimes,
-        then resamples within each regime to preserve regime structure.
-        """
+        
         if len(daily_returns) < 40:
             return self._empty_result()
 
@@ -154,7 +122,7 @@ class MonteCarloSimulator:
     def run_trade_resample(self, trade_returns: np.ndarray,
                            n_trades_per_sim: int = None,
                            initial_capital: float = 100_000) -> dict:
-        """Bootstrap resampling of trade returns."""
+        
         if len(trade_returns) == 0:
             return self._empty_result()
 
@@ -189,7 +157,7 @@ class MonteCarloSimulator:
     def run_return_perturbation(self, daily_returns: np.ndarray,
                                 noise_std: float = 0.001,
                                 initial_capital: float = 100_000) -> dict:
-        """Add random noise to daily returns to simulate model uncertainty."""
+        
         if len(daily_returns) == 0:
             return self._empty_result()
 
@@ -226,7 +194,7 @@ class MonteCarloSimulator:
                            cost_std: float = 0.0003,
                            avg_trades_per_day: float = 0.1,
                            initial_capital: float = 100_000) -> dict:
-        """Vary transaction costs randomly to simulate real-world execution."""
+        
         if len(daily_returns) == 0:
             return self._empty_result()
 
@@ -264,14 +232,7 @@ class MonteCarloSimulator:
                         crash_probability: float = 0.01,
                         spread_explosion_mult: float = 5.0,
                         initial_capital: float = 100_000) -> dict:
-        """
-        Stress test with random crash events and spread explosions.
-
-        Simulates:
-          - Flash crashes (sudden large negative return)
-          - Spread explosions (multiplied transaction costs)
-          - Missing candles (gaps)
-        """
+        
         if len(daily_returns) == 0:
             return self._empty_result()
 
@@ -314,7 +275,7 @@ class MonteCarloSimulator:
     # ═══════════════════════════════════════════════════════════
 
     def generate_report(self, result: dict) -> dict:
-        """Generate statistical summary from MC results."""
+        
         returns = result["returns"]
         drawdowns = result["max_drawdowns"]
         sharpes = result.get("sharpe_ratios", np.array([]))
@@ -348,7 +309,7 @@ class MonteCarloSimulator:
         return report
 
     def plot_all(self, result: dict, save_dir: str = "results/monte_carlo"):
-        """Generate all Monte Carlo visualizations."""
+        
         os.makedirs(save_dir, exist_ok=True)
 
         self._plot_equity_fan(result, save_dir)
@@ -364,7 +325,7 @@ class MonteCarloSimulator:
     # ═══════════════════════════════════════════════════════════
 
     def _plot_equity_fan(self, result: dict, save_dir: str):
-        """Fan chart showing percentile bands of equity paths."""
+        
         curves = result["equity_curves"]
         if isinstance(curves, list):
             max_len = min(len(c) for c in curves)
@@ -404,7 +365,7 @@ class MonteCarloSimulator:
         plt.close(fig)
 
     def _plot_return_histogram(self, result: dict, save_dir: str):
-        """Distribution of final returns."""
+        
         fig, ax = plt.subplots(figsize=(10, 6))
         returns = result["returns"] * 100
 
@@ -424,7 +385,7 @@ class MonteCarloSimulator:
         plt.close(fig)
 
     def _plot_drawdown_histogram(self, result: dict, save_dir: str):
-        """Distribution of max drawdowns."""
+        
         fig, ax = plt.subplots(figsize=(10, 6))
         dd = result["max_drawdowns"] * 100
 
@@ -442,7 +403,7 @@ class MonteCarloSimulator:
         plt.close(fig)
 
     def _plot_sharpe_histogram(self, result: dict, save_dir: str):
-        """Distribution of Sharpe ratios."""
+        
         fig, ax = plt.subplots(figsize=(10, 6))
         sharpes = result["sharpe_ratios"]
 

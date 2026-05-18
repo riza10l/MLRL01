@@ -12,7 +12,7 @@ from sb3_contrib import RecurrentPPO
 
 # Import project modules
 from env.trading_env import TradingEnv
-from features.features import build_production_features, robust_normalize
+from features.features import build_production_features, robust_normalize, get_production_feature_columns
 from agents.train import load_latest_data
 from risk.risk_manager import RiskManager
 
@@ -36,7 +36,7 @@ class WalkForwardEngine:
         self.df = build_production_features(self.raw_df)
         
         # Identify feature columns (numeric)
-        self.feature_cols = [c for c in self.df.columns if c not in ['date', 'open', 'high', 'low', 'close', 'volume', 'regime_state', 'returns']]
+        self.feature_cols = get_production_feature_columns(self.df)
         print(f"[WF] Engine initialized. Total Features: {len(self.feature_cols)}")
 
     def run(self):

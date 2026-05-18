@@ -1,7 +1,4 @@
-"""
-TRADING ENGINE - Unified ML + RL Trading System
-Gold Futures (GC=F) - Daily Strategy
-"""
+
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -47,7 +44,6 @@ FEATURE_COLS    = ["return", "range", "ma10", "ma50",
 RL_TIMESTEPS    = 10_000          # Total timesteps training PPO
 RL_WINDOW       = 30              # Jumlah hari buat observasi RL
 
-# ── Risk Management Config ─────────────────────────────────
 INITIAL_CAPITAL = 10_000         # Modal awal (USD)
 RISK_PER_TRADE  = 0.02            # Risiko per trade (2% dari modal)
 STOP_LOSS_PCT   = 0.01           # Stop-loss 1%
@@ -57,7 +53,7 @@ MAX_DRAWDOWN    = 0.20            # Max drawdown tolerated (20%)
 # load data
 
 def load_latest_data():
-    """Auto-load file dataXX.csv yang paling baru."""
+    
     files = glob.glob("data*.csv")
     if not files:
         raise FileNotFoundError("Waduh, file data*.csv nggak ketemu! Jalanin call.py dulu.")
@@ -76,7 +72,7 @@ def load_latest_data():
 # Fungsi 
 
 def build_features(df):
-    """Tambahin fitur teknikal."""
+    
     df = df.copy()
     df["return"]         = df["close"].pct_change()
     df["range"]          = df["high"] - df["low"]
@@ -97,7 +93,7 @@ def build_features(df):
 
 # train test lalu split cees
 def split_data(df):
-    """Split 80/20, time-series style (no shuffle!)."""
+    
     split_idx = int(len(df) * TRAIN_RATIO)
 
     X = df[FEATURE_COLS]
@@ -124,7 +120,7 @@ def split_data(df):
 SCALED_MODELS = {"Logistic Regression", "SVM"}
 
 def train_ml_models(X_train, X_test, y_train, y_test, X_train_sc, X_test_sc):
-    """Latih semua model ML, return predictions + metrics."""
+    
     models = {
         "Logistic Regression" : LogisticRegression(max_iter=1000, random_state=42),
         "Decision Tree"       : DecisionTreeClassifier(max_depth=5, random_state=42),
@@ -159,14 +155,7 @@ def train_ml_models(X_train, X_test, y_train, y_test, X_train_sc, X_test_sc):
 # Setup RL env
 
 class TradingEnv(gym.Env):
-    """
-    Custom Gymnasium environment buat RL trading.
-
-    State  : Window RL_WINDOW hari harga close (normalized)
-    Action : 0=Hold, 1=Buy, 2=Sell
-    Reward : Profit/loss berdasarkan aksi + penalti drawdown
-    """
-
+    
     def __init__(self, df, window=RL_WINDOW,
                  initial_capital=INITIAL_CAPITAL,
                  stop_loss=STOP_LOSS_PCT,
@@ -234,7 +223,7 @@ class TradingEnv(gym.Env):
         return obs, reward, done, False, {}
 
     def _get_obs(self):
-        """Log-return dari window terakhir sebagai observasi."""
+        
         window_data = self.df["close"].iloc[
             self.current_step - self.window : self.current_step
         ].values.astype(np.float32)
@@ -247,7 +236,7 @@ class TradingEnv(gym.Env):
         return np.array(self.equity_curve)
 
 def train_rl_model(df):
-    """Latih PPO agent, return model + equity curve."""
+    
     print(f"\n[RL] Training PPO agent ({RL_TIMESTEPS:,} timesteps)...")
     env   = TradingEnv(df)
     model = PPO("MlpPolicy", env, verbose=0)
@@ -267,14 +256,13 @@ def train_rl_model(df):
 # Risk management
 
 class RiskManager:
-    """Kalkulasi position sizing, max drawdown, Sharpe ratio."""
-
+    
     def __init__(self, capital=INITIAL_CAPITAL, risk_pct=RISK_PER_TRADE):
         self.capital   = capital
         self.risk_pct  = risk_pct
 
     def position_size(self, stop_loss_amount):
-        """Berapa unit yang bisa dibeli berdasarkan risiko."""
+        
         risk_amount = self.capital * self.risk_pct
         if stop_loss_amount <= 0:
             return 0
@@ -282,14 +270,14 @@ class RiskManager:
 
     @staticmethod
     def max_drawdown(equity_curve):
-        """Hitung Maximum Drawdown (%)."""
+        
         peak = np.maximum.accumulate(equity_curve)
         dd   = (equity_curve - peak) / peak
         return dd.min()
 
     @staticmethod
     def sharpe_ratio(returns, rf=0.0, periods=252):
-        """Hitung Sharpe Ratio (annualized)."""
+        
         if returns.std() == 0:
             return 0.0
         return (returns.mean() - rf) / returns.std() * np.sqrt(periods)
@@ -300,10 +288,7 @@ def backtest_ml(predictions, close_test, dates_test,
                 capital=INITIAL_CAPITAL,
                 stop_loss=STOP_LOSS_PCT,
                 take_profit=TAKE_PROFIT_PCT):
-    """
-    Backtest sederhana untuk setiap ML model.
-    Signal 1 = Buy next day, 0 = hold/skip.
-    """
+    
     rm = RiskManager(capital)
     backtest_results = {}
 
@@ -364,7 +349,7 @@ def backtest_ml(predictions, close_test, dates_test,
 # output chart csv 
 
 def plot_prediction_charts(predictions, dates_test, close_test):
-    """Per-model prediction vs actual (sama kayak notebook)."""
+    
     for name, preds in predictions.items():
         safe_name = name.lower().replace(" ", "_")
         fig, axes = plt.subplots(2, 1, figsize=(16, 7), gridspec_kw={"height_ratios": [3, 1]})
@@ -389,7 +374,7 @@ def plot_prediction_charts(predictions, dates_test, close_test):
         print(f"  Saved -> {fname}")
 
 def plot_confusion_matrices(predictions, y_test):
-    """Grid confusion matrix untuk semua model."""
+    
     n     = len(predictions)
     ncols = 4
     nrows = (n + ncols - 1) // ncols
@@ -412,7 +397,7 @@ def plot_confusion_matrices(predictions, y_test):
     print("  Saved -> confusion_matrices.png")
 
 def plot_accuracy_comparison(results_df):
-    """Bar chart accuracy semua model."""
+    
     fig, ax = plt.subplots(figsize=(10, 5))
     colors  = plt.cm.RdYlGn(np.linspace(0.3, 0.9, len(results_df)))
     bars    = ax.barh(results_df["Model"], results_df["Accuracy"], color=colors)
@@ -428,7 +413,7 @@ def plot_accuracy_comparison(results_df):
     print("  Saved -> accuracy_comparison.png")
 
 def plot_backtest_equity(backtest_results, rl_equity=None, dates_test=None, capital=INITIAL_CAPITAL):
-    """Equity curve semua model + RL."""
+    
     fig, ax = plt.subplots(figsize=(16, 7))
 
     for name, res in backtest_results.items():
@@ -457,7 +442,7 @@ def plot_backtest_equity(backtest_results, rl_equity=None, dates_test=None, capi
     print("  Saved -> backtest_equity.png")
 
 def plot_risk_summary(backtest_results, rl_equity=None, capital=INITIAL_CAPITAL):
-    """Heatmap/tabel: return, MDD, Sharpe."""
+    
     rows = []
     for name, res in backtest_results.items():
         rows.append({
@@ -488,7 +473,7 @@ def plot_risk_summary(backtest_results, rl_equity=None, capital=INITIAL_CAPITAL)
     print("  Saved -> risk_summary.csv")
 
 def save_comparison_csv(results_df, backtest_results):
-    """Gabungin ML metrics + backtest ke satu CSV."""
+    
     merged = results_df.copy()
     bt_rows = []
     for name, res in backtest_results.items():
@@ -547,7 +532,6 @@ if __name__ == "__main__":
         action, _ = rl_model.predict(obs, deterministic=True)
         obs, _, done, _, _ = env_test.step(action)
     rl_equity = env_test.get_equity_curve()
-
 
     # backtest
     print("\n[BACKTEST] Menghitung equity curve semua model...")

@@ -1,27 +1,10 @@
-"""
-Trading Environment V4 — Leakage-Free Gymnasium Env
-=====================================================
-FIXES:
-  - Observation uses features at (current_step - 1) to avoid bar-completion lookahead
-  - Reward: Differential Sharpe Ratio + drawdown penalty + overtrading penalty
-  - Action space: Discrete exposure levels with proper friction modeling
-  - Kill switch on excessive drawdown
-
-"ill keep evolving till i die" ahh machine
-"""
-
 import numpy as np
 import pandas as pd
 import gymnasium as gym
 from gymnasium import spaces
 from typing import Dict, Tuple, Any
 
-
 class DifferentialSharpeReward:
-    """
-    Differential Sharpe Ratio (Moody & Saffell, 2001).
-    Directly optimizes for Sharpe ratio instead of raw P&L.
-    """
     def __init__(self, eta=0.02, lambda_cost=5.0, lambda_dd=2.0,
                  lambda_overtrade=0.5):
         self.eta = eta
@@ -74,16 +57,7 @@ class DifferentialSharpeReward:
         self.n_trades = 0
         self.n_steps = 0
 
-
 class TradingEnv(gym.Env):
-    """
-    Gymnasium Environment for Financial Time-Series trading.
-
-    V4 FIXES:
-      - Observation uses features at (current_step - 1) to prevent lookahead
-      - Professional reward function with overtrading penalty
-      - Kill switch at 20% drawdown
-    """
     metadata = {"render_modes": ["human"]}
 
     def __init__(
@@ -253,13 +227,6 @@ class TradingEnv(gym.Env):
         return obs, reward, terminated, truncated, info
 
     def _get_obs(self) -> np.ndarray:
-        """
-        Leakage-free observation builder.
-
-        CRITICAL FIX: Uses features at (current_step - 1) to ensure
-        the agent only sees data from COMPLETED bars, not the bar
-        it is about to trade on.
-        """
         # Use previous step's features (the last COMPLETED bar)
         obs_step = max(0, self.current_step - 1)
 
