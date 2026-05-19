@@ -1,0 +1,544 @@
+// ============================================================
+// DOL MTF Levels [ICT]
+// Versi: 1.0
+// Tujuan: Menampilkan level Draw on Liquidity dari timeframe
+//         yang lebih besar (Daily/Weekly/Monthly) pada chart
+//         yang lebih kecil (intraday/HTF lebih kecil).
+// Konsep: ICT - Internal/External Range Liquidity
+// ============================================================
+
+//@version=5
+indicator(title="DOL MTF Levels [ICT]", shorttitle="DOL MTF [ICT]",
+     overlay=true, max_lines_count=20, max_labels_count=20)
+
+// ============================================================
+// BAGIAN 1: INPUT KONFIGURASI
+// ============================================================
+
+// Pilihan mode timeframe yang ingin ditampilkan
+timeframeMode = input.string(
+     title      = "Timeframe Mode",
+     defval     = "All",
+     options    = ["Daily", "Weekly", "Monthly", "All"],
+     tooltip    = "Pilih timeframe DOL yang ingin ditampilkan: Daily, Weekly, Monthly, atau semuanya sekaligus.")
+
+// Sensitivitas alert: jarak harga ke level (dalam %)
+alertProximityPct = input.float(
+     title   = "Alert Proximity (%)",
+     defval  = 0.1,
+     minval  = 0.01,
+     maxval  = 5.0,
+     step    = 0.01,
+     tooltip = "Persentase jarak harga ke level DOL yang memicu alert. Default: 0.1%")
+
+// Opsi tampilan label
+showPeriodCount = input.bool(
+     title   = "Tampilkan Hitungan Periode Belum Tersentuh",
+     defval  = true,
+     tooltip = "Tampilkan berapa hari/minggu/bulan level belum tertembus di label.")
+
+// Transparansi warna garis
+lineTransparency = input.int(
+     title   = "Transparansi Garis (0=Penuh, 100=Transparan)",
+     defval  = 0,
+     minval  = 0,
+     maxval  = 80,
+     step    = 5)
+
+// ============================================================
+// BAGIAN 2: WARNA DAN STYLE
+// ============================================================
+
+// Warna Bullish DOL (level di bawah harga saat ini = likuiditas sell side)
+// dan Bearish DOL (level di atas harga saat ini = likuiditas buy side)
+COLOR_BULLISH = color.new(color.green, lineTransparency)   // Hijau - SSL (Sell Side Liquidity)
+COLOR_BEARISH = color.new(color.red,   lineTransparency)   // Merah - BSL (Buy Side Liquidity)
+
+// ============================================================
+// BAGIAN 3: FUNGSI BANTUAN
+// ============================================================
+
+// Fungsi: Tentukan apakah sebuah level sudah tertembus oleh harga penutupan
+// Parameter:
+//   levelPrice : harga level yang diperiksa
+//   isHigh     : true jika level adalah high (BSL), false jika low (SSL)
+// Return: true jika level sudah dimitigasi (close melewati level)
+f_isMitigated(float levelPrice, bool isHigh) =>
+    isHigh ? close > levelPrice : close < levelPrice
+
+// Fungsi: Hitung warna level berdasarkan posisi relatif terhadap harga saat ini
+// Level HIGH di atas harga = target likuiditas Bearish (merah)
+// Level LOW di bawah harga = target likuiditas Bullish (hijau)
+f_levelColor(float levelPrice, bool isHigh) =>
+    isHigh ? COLOR_BEARISH : COLOR_BULLISH
+
+// ============================================================
+// BAGIAN 4: PENGAMBILAN DATA REQUEST.SECURITY
+// ============================================================
+
+// --- Data Daily ---
+// Mengambil high, low, open, close dari timeframe Daily
+// barmerge.lookahead_off digunakan agar tidak terjadi repainting (lookahead bias)
+[dHigh, dLow, dOpen, dClose, dBarIndex] = request.security(
+     syminfo.tickerid, "D",
+     [high, low, open, close, bar_index],
+     lookahead = barmerge.lookahead_off)
+
+// High/Low Daily kemarin (sesi sebelumnya = [1] pada timeframe Daily)
+[dHighPrev, dLowPrev] = request.security(
+     syminfo.tickerid, "D",
+     [high[1], low[1]],
+     lookahead = barmerge.lookahead_off)
+
+// Hitungan bar Daily yang sudah berlalu sejak level terbentuk
+dBarsSince = request.security(
+     syminfo.tickerid, "D",
+     bar_index,
+     lookahead = barmerge.lookahead_off)
+
+// --- Data Weekly ---
+[wHigh, wLow, wOpen, wClose, wBarIndex] = request.security(
+     syminfo.tickerid, "W",
+     [high, low, open, close, bar_index],
+     lookahead = barmerge.lookahead_off)
+
+[wHighPrev, wLowPrev] = request.security(
+     syminfo.tickerid, "W",
+     [high[1], low[1]],
+     lookahead = barmerge.lookahead_off)
+
+// --- Data Monthly ---
+[mHigh, mLow, mOpen, mClose, mBarIndex] = request.security(
+     syminfo.tickerid, "1M",
+     [high, low, open, close, bar_index],
+     lookahead = barmerge.lookahead_off)
+
+[mHighPrev, mLowPrev] = request.security(
+     syminfo.tickerid, "1M",
+     [high[1], low[1]],
+     lookahead = barmerge.lookahead_off)
+
+// ============================================================
+// BAGIAN 5: LOGIKA MITIGASI & VALIDASI LEVEL
+// ============================================================
+
+// Harga referensi saat ini
+currentClose = close
+
+// --- Validasi Daily ---
+// Level high kemarin valid selama close belum menutup di atas level tersebut
+dHighValid = not f_isMitigated(dHighPrev, true)
+// Level low kemarin valid selama close belum menutup di bawah level tersebut
+dLowValid  = not f_isMitigated(dLowPrev, false)
+
+// --- Validasi Weekly ---
+wHighValid = not f_isMitigated(wHighPrev, true)
+wLowValid  = not f_isMitigated(wLowPrev, false)
+
+// --- Validasi Monthly ---
+mHighValid = not f_isMitigated(mHighPrev, true)
+mLowValid  = not f_isMitigated(mLowPrev, false)
+
+// ============================================================
+// BAGIAN 6: LOGIKA PENGGAMBARAN GARIS & LABEL
+// ============================================================
+
+// Variabel persistent untuk menyimpan garis dan label agar bisa diupdate
+// Daily
+var line  dHighLine  = na
+var line  dLowLine   = na
+var label dHighLabel = na
+var label dLowLabel  = na
+
+// Weekly
+var line  wHighLine  = na
+var line  wLowLine   = na
+var label wHighLabel = na
+var label wLowLabel  = na
+
+// Monthly
+var line  mHighLine  = na
+var line  mLowLine   = na
+var label mHighLabel = na
+var label mLowLabel  = na
+
+// Fungsi lokal: Buat atau perbarui garis horizontal
+// Karena Pine Script tidak mendukung fungsi yang return line/label secara langsung
+// maka kita kelola per blok
+
+// Panjang garis ke kiri (jumlah bar ke belakang)
+LINE_LOOKBACK = 500
+
+// Tentukan apakah mode tertentu aktif
+showDaily   = timeframeMode == "Daily"   or timeframeMode == "All"
+showWeekly  = timeframeMode == "Weekly"  or timeframeMode == "All"
+showMonthly = timeframeMode == "Monthly" or timeframeMode == "All"
+
+// ============================================================
+// BAGIAN 7: RENDER DAILY LEVELS
+// ============================================================
+
+if showDaily and barstate.islast
+    // --- Daily HIGH (BSL - Buy Side Liquidity) ---
+    if dHighValid
+        // Hapus garis/label lama jika ada
+        line.delete(dHighLine)
+        label.delete(dHighLabel)
+
+        // Buat garis baru
+        dHighLine := line.new(
+             x1     = bar_index - LINE_LOOKBACK,
+             y1     = dHighPrev,
+             x2     = bar_index + 3,
+             y2     = dHighPrev,
+             color  = COLOR_BEARISH,
+             width  = 2,                      // Lebih tebal untuk Daily
+             style  = line.style_solid)       // Solid untuk Daily
+
+        // Teks label: sertakan hitungan hari jika diaktifkan
+        dHighLabelText = showPeriodCount ? "D DOL ▲ (" + str.tostring(1) + "d)" : "D DOL ▲"
+
+        // Buat label di ujung kanan
+        dHighLabel := label.new(
+             x      = bar_index + 3,
+             y      = dHighPrev,
+             text   = dHighLabelText,
+             color  = color.new(COLOR_BEARISH, 80),
+             textcolor = COLOR_BEARISH,
+             style  = label.style_label_left,
+             size   = size.small)
+    else
+        // Hapus garis jika sudah termitigasi
+        line.delete(dHighLine)
+        label.delete(dHighLabel)
+        dHighLine  := na
+        dHighLabel := na
+
+    // --- Daily LOW (SSL - Sell Side Liquidity) ---
+    if dLowValid
+        line.delete(dLowLine)
+        label.delete(dLowLabel)
+
+        dLowLine := line.new(
+             x1     = bar_index - LINE_LOOKBACK,
+             y1     = dLowPrev,
+             x2     = bar_index + 3,
+             y2     = dLowPrev,
+             color  = COLOR_BULLISH,
+             width  = 2,
+             style  = line.style_solid)
+
+        dLowLabelText = showPeriodCount ? "D DOL ▼ (" + str.tostring(1) + "d)" : "D DOL ▼"
+
+        dLowLabel := label.new(
+             x      = bar_index + 3,
+             y      = dLowPrev,
+             text   = dLowLabelText,
+             color  = color.new(COLOR_BULLISH, 80),
+             textcolor = COLOR_BULLISH,
+             style  = label.style_label_left,
+             size   = size.small)
+    else
+        line.delete(dLowLine)
+        label.delete(dLowLabel)
+        dLowLine  := na
+        dLowLabel := na
+
+// ============================================================
+// BAGIAN 8: RENDER WEEKLY LEVELS
+// ============================================================
+
+if showWeekly and barstate.islast
+    // --- Weekly HIGH ---
+    if wHighValid
+        line.delete(wHighLine)
+        label.delete(wHighLabel)
+
+        wHighLine := line.new(
+             x1     = bar_index - LINE_LOOKBACK,
+             y1     = wHighPrev,
+             x2     = bar_index + 5,
+             y2     = wHighPrev,
+             color  = COLOR_BEARISH,
+             width  = 2,
+             style  = line.style_dashed)     // Dash untuk Weekly
+
+        wHighLabelText = showPeriodCount ? "W DOL ▲ (" + str.tostring(1) + "w)" : "W DOL ▲"
+
+        wHighLabel := label.new(
+             x      = bar_index + 5,
+             y      = wHighPrev,
+             text   = wHighLabelText,
+             color  = color.new(COLOR_BEARISH, 80),
+             textcolor = COLOR_BEARISH,
+             style  = label.style_label_left,
+             size   = size.small)
+    else
+        line.delete(wHighLine)
+        label.delete(wHighLabel)
+        wHighLine  := na
+        wHighLabel := na
+
+    // --- Weekly LOW ---
+    if wLowValid
+        line.delete(wLowLine)
+        label.delete(wLowLabel)
+
+        wLowLine := line.new(
+             x1     = bar_index - LINE_LOOKBACK,
+             y1     = wLowPrev,
+             x2     = bar_index + 5,
+             y2     = wLowPrev,
+             color  = COLOR_BULLISH,
+             width  = 2,
+             style  = line.style_dashed)
+
+        wLowLabelText = showPeriodCount ? "W DOL ▼ (" + str.tostring(1) + "w)" : "W DOL ▼"
+
+        wLowLabel := label.new(
+             x      = bar_index + 5,
+             y      = wLowPrev,
+             text   = wLowLabelText,
+             color  = color.new(COLOR_BULLISH, 80),
+             textcolor = COLOR_BULLISH,
+             style  = label.style_label_left,
+             size   = size.small)
+    else
+        line.delete(wLowLine)
+        label.delete(wLowLabel)
+        wLowLine  := na
+        wLowLabel := na
+
+// ============================================================
+// BAGIAN 9: RENDER MONTHLY LEVELS
+// ============================================================
+
+if showMonthly and barstate.islast
+    // --- Monthly HIGH ---
+    if mHighValid
+        line.delete(mHighLine)
+        label.delete(mHighLabel)
+
+        mHighLine := line.new(
+             x1     = bar_index - LINE_LOOKBACK,
+             y1     = mHighPrev,
+             x2     = bar_index + 7,
+             y2     = mHighPrev,
+             color  = COLOR_BEARISH,
+             width  = 3,
+             style  = line.style_dotted)     // Dot untuk Monthly
+
+        mHighLabelText = showPeriodCount ? "M DOL ▲ (" + str.tostring(1) + "m)" : "M DOL ▲"
+
+        mHighLabel := label.new(
+             x      = bar_index + 7,
+             y      = mHighPrev,
+             text   = mHighLabelText,
+             color  = color.new(COLOR_BEARISH, 80),
+             textcolor = COLOR_BEARISH,
+             style  = label.style_label_left,
+             size   = size.normal)           // Sedikit lebih besar untuk Monthly
+    else
+        line.delete(mHighLine)
+        label.delete(mHighLabel)
+        mHighLine  := na
+        mHighLabel := na
+
+    // --- Monthly LOW ---
+    if mLowValid
+        line.delete(mLowLine)
+        label.delete(mLowLabel)
+
+        mLowLine := line.new(
+             x1     = bar_index - LINE_LOOKBACK,
+             y1     = mLowPrev,
+             x2     = bar_index + 7,
+             y2     = mLowPrev,
+             color  = COLOR_BULLISH,
+             width  = 3,
+             style  = line.style_dotted)
+
+        mLowLabelText = showPeriodCount ? "M DOL ▼ (" + str.tostring(1) + "m)" : "M DOL ▼"
+
+        mLowLabel := label.new(
+             x      = bar_index + 7,
+             y      = mLowPrev,
+             text   = mLowLabelText,
+             color  = color.new(COLOR_BULLISH, 80),
+             textcolor = COLOR_BULLISH,
+             style  = label.style_label_left,
+             size   = size.normal)
+    else
+        line.delete(mLowLine)
+        label.delete(mLowLabel)
+        mLowLine  := na
+        mLowLabel := na
+
+// ============================================================
+// BAGIAN 10: SISTEM ALERT
+// ============================================================
+
+// Fungsi pembantu: Hitung jarak relatif harga ke level (dalam %)
+f_proximityPct(float levelPrice) =>
+    math.abs(close - levelPrice) / levelPrice * 100
+
+// --- Alert: Harga mendekati Daily DOL ---
+if showDaily
+    // Alert mendekati Daily High (BSL)
+    if dHighValid
+        dHighProximity = f_proximityPct(dHighPrev)
+        if dHighProximity <= alertProximityPct
+            alert(
+                 "🔴 [DOL Daily] Harga mendekati HIGH kemarin: " + str.tostring(dHighPrev, format.mintick) +
+                 " | Jarak: " + str.tostring(dHighProximity, "#.###") + "% | " + syminfo.ticker,
+                 alert.freq_once_per_bar_close)
+
+    // Alert mendekati Daily Low (SSL)
+    if dLowValid
+        dLowProximity = f_proximityPct(dLowPrev)
+        if dLowProximity <= alertProximityPct
+            alert(
+                 "🟢 [DOL Daily] Harga mendekati LOW kemarin: " + str.tostring(dLowPrev, format.mintick) +
+                 " | Jarak: " + str.tostring(dLowProximity, "#.###") + "% | " + syminfo.ticker,
+                 alert.freq_once_per_bar_close)
+
+// --- Alert: Harga mendekati Weekly DOL ---
+if showWeekly
+    if wHighValid
+        wHighProximity = f_proximityPct(wHighPrev)
+        if wHighProximity <= alertProximityPct
+            alert(
+                 "🔴 [DOL Weekly] Harga mendekati HIGH minggu lalu: " + str.tostring(wHighPrev, format.mintick) +
+                 " | Jarak: " + str.tostring(wHighProximity, "#.###") + "% | " + syminfo.ticker,
+                 alert.freq_once_per_bar_close)
+
+    if wLowValid
+        wLowProximity = f_proximityPct(wLowPrev)
+        if wLowProximity <= alertProximityPct
+            alert(
+                 "🟢 [DOL Weekly] Harga mendekati LOW minggu lalu: " + str.tostring(wLowPrev, format.mintick) +
+                 " | Jarak: " + str.tostring(wLowProximity, "#.###") + "% | " + syminfo.ticker,
+                 alert.freq_once_per_bar_close)
+
+// --- Alert: Harga mendekati Monthly DOL ---
+if showMonthly
+    if mHighValid
+        mHighProximity = f_proximityPct(mHighPrev)
+        if mHighProximity <= alertProximityPct
+            alert(
+                 "🔴 [DOL Monthly] Harga mendekati HIGH bulan lalu: " + str.tostring(mHighPrev, format.mintick) +
+                 " | Jarak: " + str.tostring(mHighProximity, "#.###") + "% | " + syminfo.ticker,
+                 alert.freq_once_per_bar_close)
+
+    if mLowValid
+        mLowProximity = f_proximityPct(mLowPrev)
+        if mLowProximity <= alertProximityPct
+            alert(
+                 "🟢 [DOL Monthly] Harga mendekati LOW bulan lalu: " + str.tostring(mLowPrev, format.mintick) +
+                 " | Jarak: " + str.tostring(mLowProximity, "#.###") + "% | " + syminfo.ticker,
+                 alert.freq_once_per_bar_close)
+
+// --- Alert: Level tertembus (Mitigasi terjadi) ---
+// Alert saat mitigasi terjadi pada candle saat ini
+dHighMitigated = showDaily   and not dHighValid and f_isMitigated(dHighPrev, true)
+dLowMitigated  = showDaily   and not dLowValid  and f_isMitigated(dLowPrev,  false)
+wHighMitigated = showWeekly  and not wHighValid  and f_isMitigated(wHighPrev, true)
+wLowMitigated  = showWeekly  and not wLowValid   and f_isMitigated(wLowPrev,  false)
+mHighMitigated = showMonthly and not mHighValid  and f_isMitigated(mHighPrev, true)
+mLowMitigated  = showMonthly and not mLowValid   and f_isMitigated(mLowPrev,  false)
+
+if dHighMitigated
+    alert("⚡ [DOL Daily] BSL (High kemarin) TERTEMBUS pada " + str.tostring(dHighPrev, format.mintick) + " | " + syminfo.ticker, alert.freq_once_per_bar_close)
+if dLowMitigated
+    alert("⚡ [DOL Daily] SSL (Low kemarin) TERTEMBUS pada " + str.tostring(dLowPrev, format.mintick) + " | " + syminfo.ticker, alert.freq_once_per_bar_close)
+if wHighMitigated
+    alert("⚡ [DOL Weekly] BSL (High minggu lalu) TERTEMBUS pada " + str.tostring(wHighPrev, format.mintick) + " | " + syminfo.ticker, alert.freq_once_per_bar_close)
+if wLowMitigated
+    alert("⚡ [DOL Weekly] SSL (Low minggu lalu) TERTEMBUS pada " + str.tostring(wLowPrev, format.mintick) + " | " + syminfo.ticker, alert.freq_once_per_bar_close)
+if mHighMitigated
+    alert("⚡ [DOL Monthly] BSL (High bulan lalu) TERTEMBUS pada " + str.tostring(mHighPrev, format.mintick) + " | " + syminfo.ticker, alert.freq_once_per_bar_close)
+if mLowMitigated
+    alert("⚡ [DOL Monthly] SSL (Low bulan lalu) TERTEMBUS pada " + str.tostring(mLowPrev, format.mintick) + " | " + syminfo.ticker, alert.freq_once_per_bar_close)
+
+// ============================================================
+// BAGIAN 11: INFORMASI DEBUG / STATUS (TABEL OPSIONAL)
+// ============================================================
+// Tampilkan tabel kecil di pojok kanan bawah untuk monitoring status level
+
+var table statusTable = table.new(
+     position       = position.bottom_right,
+     columns        = 3,
+     rows           = 7,
+     bgcolor        = color.new(color.black, 85),
+     border_width   = 1,
+     border_color   = color.new(color.gray, 50))
+
+if barstate.islast
+    // Header
+    table.cell(statusTable, 0, 0, "TF",    text_color = color.gray, text_size = size.small, bgcolor = color.new(color.black, 60))
+    table.cell(statusTable, 1, 0, "HIGH",  text_color = color.gray, text_size = size.small, bgcolor = color.new(color.black, 60))
+    table.cell(statusTable, 2, 0, "LOW",   text_color = color.gray, text_size = size.small, bgcolor = color.new(color.black, 60))
+
+    // Daily row
+    dHighStatus = dHighValid ? "✓ " + str.tostring(dHighPrev, format.mintick) : "✗ Mitigasi"
+    dLowStatus  = dLowValid  ? "✓ " + str.tostring(dLowPrev,  format.mintick) : "✗ Mitigasi"
+    table.cell(statusTable, 0, 1, "Daily",     text_color = color.white,   text_size = size.tiny)
+    table.cell(statusTable, 1, 1, dHighStatus, text_color = dHighValid ? COLOR_BEARISH : color.gray, text_size = size.tiny)
+    table.cell(statusTable, 2, 1, dLowStatus,  text_color = dLowValid  ? COLOR_BULLISH : color.gray, text_size = size.tiny)
+
+    // Weekly row
+    wHighStatus = wHighValid ? "✓ " + str.tostring(wHighPrev, format.mintick) : "✗ Mitigasi"
+    wLowStatus  = wLowValid  ? "✓ " + str.tostring(wLowPrev,  format.mintick) : "✗ Mitigasi"
+    table.cell(statusTable, 0, 2, "Weekly",    text_color = color.white,   text_size = size.tiny)
+    table.cell(statusTable, 1, 2, wHighStatus, text_color = wHighValid ? COLOR_BEARISH : color.gray, text_size = size.tiny)
+    table.cell(statusTable, 2, 2, wLowStatus,  text_color = wLowValid  ? COLOR_BULLISH : color.gray, text_size = size.tiny)
+
+    // Monthly row
+    mHighStatus = mHighValid ? "✓ " + str.tostring(mHighPrev, format.mintick) : "✗ Mitigasi"
+    mLowStatus  = mLowValid  ? "✓ " + str.tostring(mLowPrev,  format.mintick) : "✗ Mitigasi"
+    table.cell(statusTable, 0, 3, "Monthly",   text_color = color.white,   text_size = size.tiny)
+    table.cell(statusTable, 1, 3, mHighStatus, text_color = mHighValid ? COLOR_BEARISH : color.gray, text_size = size.tiny)
+    table.cell(statusTable, 2, 3, mLowStatus,  text_color = mLowValid  ? COLOR_BULLISH : color.gray, text_size = size.tiny)
+
+    // Separator
+    table.cell(statusTable, 0, 4, "", text_color = color.gray, text_size = size.tiny)
+    table.cell(statusTable, 1, 4, "", text_color = color.gray, text_size = size.tiny)
+    table.cell(statusTable, 2, 4, "", text_color = color.gray, text_size = size.tiny)
+
+    // Legend
+    table.cell(statusTable, 0, 5, "🔴 BSL",  text_color = COLOR_BEARISH, text_size = size.tiny)
+    table.cell(statusTable, 1, 5, "Target",  text_color = color.gray,    text_size = size.tiny)
+    table.cell(statusTable, 2, 5, "di Atas", text_color = color.gray,    text_size = size.tiny)
+
+    table.cell(statusTable, 0, 6, "🟢 SSL",  text_color = COLOR_BULLISH, text_size = size.tiny)
+    table.cell(statusTable, 1, 6, "Target",  text_color = color.gray,    text_size = size.tiny)
+    table.cell(statusTable, 2, 6, "di Bawah",text_color = color.gray,    text_size = size.tiny)
+
+// ============================================================
+// BAGIAN 12: PLOT REFERENSI (OPSIONAL - Bisa dinonaktifkan)
+// ============================================================
+// Plot titik kecil sebagai konfirmasi visual bahwa indikator aktif
+// pada candle terakhir (tidak mempengaruhi tampilan utama)
+
+// Tidak diperlukan plot tambahan karena semua visual menggunakan
+// line dan label yang digambar secara manual di atas.
+
+// ============================================================
+// CATATAN PENTING UNTUK PENGGUNA:
+// ============================================================
+// 1. Indikator ini HANYA bekerja dengan benar pada timeframe
+//    yang LEBIH KECIL dari timeframe yang dipilih.
+//    Contoh: Gunakan di chart 1H/4H untuk melihat Daily DOL.
+//
+// 2. Garis hanya diperbarui pada candle terakhir (barstate.islast)
+//    untuk menghindari error max_lines_count.
+//
+// 3. BSL (Buy Side Liquidity) = High periode sebelumnya = garis MERAH
+//    SSL (Sell Side Liquidity) = Low periode sebelumnya  = garis HIJAU
+//
+// 4. Mitigasi terjadi ketika CLOSE candle menembus level tersebut.
+//    Setelah termitigasi, garis akan otomatis dihapus.
+//
+// 5. Untuk mengaktifkan alert, buka menu Alert di TradingView
+//    dan pilih kondisi "DOL MTF Levels [ICT]: Any alert() call".
+// ============================================================

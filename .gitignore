@@ -1,41 +1,61 @@
 # Python
 __pycache__/
 *.py[cod]
+*.pyo
+*.pyd
+*.egg
 *.egg-info/
 dist/
 build/
+.eggs/
 
 # Virtual environments
-.venv/
 venv/
+env/
+.venv/
+.env/
 myenv/
 
-# IDE
-.idea/
-.vscode/
-*.swp
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
 
-# Data (too large for git)
-# jupiter/  <-- removed this
-data/
+# Data files
+*.csv
+*.parquet
+*.feather
+*.h5
+*.hdf5
+*.pkl
+*.pickle
 
-# Specific ignores for jupiter folder
-jupiter/*.csv
-jupiter/*.zip
-jupiter/*.png
-jupiter/*.pinescript
-jupiter/.idea/
-jupiter/.ipynb_checkpoints/
-jupiter/simple ML/
+# Model checkpoints
+models/
+checkpoints/
+*.zip
+*.pt
+*.pth
 
-# Results (regeneratable)
-results/plots/
+# Generated results
 results/monte_carlo/
-results/wf_v3/
+results/plots/
+!results/plots/.gitkeep
+!results/plots/reports/.gitkeep
 
-# Models (binary, too large)
-models/saved_models/*.zip
+# Logs
+logs/
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
 
 # OS
 .DS_Store
 Thumbs.db
+
+# Misc
+*.tmp
+*.bak

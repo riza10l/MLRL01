@@ -248,6 +248,7 @@ def main():
     else:
         print(f"  Leakage Status: REVIEW NEEDED")
     print("=" * 65)
+    print("sabar ya mas")
 
 def _print_mc_report(report):
     
