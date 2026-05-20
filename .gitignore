@@ -1,0 +1,27 @@
+# Virtual Environment
+venv/
+.venv/
+env/
+myenv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# IDE
+.idea/
+.vscode/
+
+# Large binaries/models
+*.pt
+*.zip
+*.dll
+*.exe
+*.csv
+*.png
+
+# Logs
+logs/
+tensorboard/
