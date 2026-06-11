@@ -1,15 +1,9 @@
-"""
-MLRL01 — Streamlit Dashboard
-Gold Futures Quantitative Trading Engine
-Converted from CLI main.py → Interactive Web Dashboard
-"""
-
 import os
 import sys
 import warnings
 warnings.filterwarnings("ignore")
 
-# ── Path setup (same as main.py) ──────────────────────────────────────────────
+#pokoe sama kayak main.py cuman ini versi pake steroid
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import numpy as np
@@ -17,7 +11,6 @@ import pandas as pd
 import streamlit as st
 import glob
 
-# ── Internal module imports ───────────────────────────────────────────────────
 from agents.train import (
     load_latest_data, split_data, train_ml_models,
     train_rl_agent, walk_forward_validation, EMBARGO_BARS,
@@ -36,7 +29,6 @@ from backtest.metrics import BacktestMetrics
 from risk.risk_manager import RiskManager
 from monte_carlo.simulator import MonteCarloSimulator
 
-# ── Directories ───────────────────────────────────────────────────────────────
 BASE_DIR         = os.path.dirname(os.path.abspath(__file__))
 SAVE_DIR_PLOTS   = os.path.join(BASE_DIR, "results", "plots")
 SAVE_DIR_REPORTS = os.path.join(BASE_DIR, "results", "reports")
@@ -45,9 +37,6 @@ MODEL_SAVE_DIR   = os.path.join(BASE_DIR, "models", "saved_models")
 DATA_DIR         = "jupiter" if os.path.exists("jupiter") else os.path.join(BASE_DIR, "jupiter")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  PAGE CONFIG & CUSTOM THEME
-# ══════════════════════════════════════════════════════════════════════════════
 
 st.set_page_config(
     page_title="MLRL01 — Gold Quant Engine",
@@ -234,10 +223,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  HELPER FUNCTIONS
-# ══════════════════════════════════════════════════════════════════════════════
-
 def render_metric_card(label, value, fmt="str", prefix="", suffix=""):
     """Render a styled metric card."""
     if fmt == "pct":
@@ -282,10 +267,6 @@ def format_mc_report(report):
         "Worst Max DD": f"{report.get('worst_max_dd', 0):.2%}",
     }
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  SIDEBAR — CONFIGURATION
-# ══════════════════════════════════════════════════════════════════════════════
 
 with st.sidebar:
     st.markdown("## 🥇 MLRL01")
@@ -338,9 +319,6 @@ with st.sidebar:
     )
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  HEADER
-# ══════════════════════════════════════════════════════════════════════════════
 
 st.markdown("""
 <div class="hero-banner">
@@ -352,9 +330,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  ENGINE EXECUTION
-# ══════════════════════════════════════════════════════════════════════════════
 
 start_clicked = st.button("🚀  Start Engine", use_container_width=True)
 
@@ -364,8 +339,6 @@ if start_clicked:
         os.makedirs(d, exist_ok=True)
 
     with st.status("⏳ Running MLRL01 Engine...", expanded=True) as status:
-
-        # ── Stage 1: Load Data ────────────────────────────────────────────
         st.write("📥 **Stage 1/7** — Loading data...")
         try:
             df_raw = load_latest_data(DATA_DIR)
@@ -374,8 +347,6 @@ if start_clicked:
         except Exception as e:
             st.error(f"❌ Failed to load data: {e}")
             st.stop()
-
-        # ── Stage 2: Anomaly Scan & Feature Engineering ───────────────────
         st.write("🔧 **Stage 2/7** — Feature engineering...")
         try:
             clean_mask = BacktestEngine.detect_anomalous_candles(df_raw)
@@ -396,7 +367,6 @@ if start_clicked:
             st.error(f"❌ Feature engineering failed: {e}")
             st.stop()
 
-        # ── Stage 3: Split & Train ML ─────────────────────────────────────
         st.write("🤖 **Stage 3/7** — Training ML models...")
         try:
             (X_train, X_test, y_train, y_test,
@@ -411,7 +381,6 @@ if start_clicked:
             st.error(f"❌ ML training failed: {e}")
             st.stop()
 
-        # ── Stage 4: Train RL Agent ───────────────────────────────────────
         st.write("🧠 **Stage 4/7** — Training RL agent (PPO)...")
         try:
             split_idx = int(len(df) * TRAIN_RATIO)
@@ -442,7 +411,6 @@ if start_clicked:
             st.error(f"❌ RL training failed: {e}")
             st.stop()
 
-        # ── Stage 5: Backtesting ──────────────────────────────────────────
         st.write("📊 **Stage 5/7** — Running backtests...")
         try:
             bt_engine = BacktestEngine()
@@ -463,7 +431,6 @@ if start_clicked:
             st.error(f"❌ Backtesting failed: {e}")
             st.stop()
 
-        # ── Stage 6: Monte Carlo ──────────────────────────────────────────
         mc_reports = {}
         if RUN_MONTE_CARLO:
             st.write("🎲 **Stage 6/7** — Monte Carlo simulation...")
@@ -503,7 +470,6 @@ if start_clicked:
         else:
             st.write("⏭️ **Stage 6/7** — Monte Carlo skipped")
 
-        # ── Stage 7: Walk-Forward ─────────────────────────────────────────
         wf_results = pd.DataFrame()
         if RUN_WALK_FWD:
             st.write("📋 **Stage 7/7** — Walk-forward validation...")
@@ -519,7 +485,6 @@ if start_clicked:
         else:
             st.write("⏭️ **Stage 7/7** — Walk-forward skipped")
 
-        # ── Generate Charts ───────────────────────────────────────────────
         st.write("📈 Generating charts...")
         try:
             plot_equity_curves(bt_results, rl_equity, bm_results, dates_test,
@@ -534,7 +499,6 @@ if start_clicked:
         except Exception as e:
             st.warning(f"⚠️ Chart generation error: {e}")
 
-        # ── Save Reports ──────────────────────────────────────────────────
         try:
             save_risk_summary(all_metrics, save_dir=SAVE_DIR_REPORTS)
             save_comparison_csv(results_df, bt_results, save_dir=SAVE_DIR_REPORTS)
@@ -547,7 +511,6 @@ if start_clicked:
 
         status.update(label="✅ Engine Complete!", state="complete", expanded=False)
 
-    # ── Store results in session state ────────────────────────────────────
     st.session_state["engine_done"] = True
     st.session_state["results_df"] = results_df
     st.session_state["rl_metrics"] = rl_metrics
@@ -563,9 +526,6 @@ if start_clicked:
     st.session_state["df_shape"] = df.shape
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  RESULTS DISPLAY (persisted via session_state)
-# ══════════════════════════════════════════════════════════════════════════════
 
 if st.session_state.get("engine_done"):
 
@@ -580,7 +540,6 @@ if st.session_state.get("engine_done"):
 
     st.markdown('<div class="gold-divider"></div>', unsafe_allow_html=True)
 
-    # ── Tabs ──────────────────────────────────────────────────────────────
     tab_overview, tab_equity, tab_ml, tab_mc, tab_wf = st.tabs([
         "📊 Overview",
         "📈 Equity Curves",
@@ -589,12 +548,8 @@ if st.session_state.get("engine_done"):
         "📋 Walk-Forward",
     ])
 
-    # ══════════════════════════════════════════════════════════════════════
-    #  TAB 1: OVERVIEW
-    # ══════════════════════════════════════════════════════════════════════
     with tab_overview:
 
-        # ── Leakage Check ─────────────────────────────────────────────────
         st.markdown('<div class="section-header">🔒 Leakage Sanity Check</div>',
                     unsafe_allow_html=True)
 
@@ -611,7 +566,6 @@ if st.session_state.get("engine_done"):
                 unsafe_allow_html=True
             )
 
-        # ── RL Metrics Cards ──────────────────────────────────────────────
         st.markdown('<div class="section-header">🧠 RL Agent Performance (PPO)</div>',
                     unsafe_allow_html=True)
 
@@ -641,7 +595,6 @@ if st.session_state.get("engine_done"):
             render_metric_card("Total Costs", rl_metrics.get("total_costs", 0), fmt="float",
                                prefix="$")
 
-        # ── RL vs Benchmark ───────────────────────────────────────────────
         st.markdown('<div class="section-header">⚔️ RL vs Benchmarks</div>',
                     unsafe_allow_html=True)
 
@@ -658,7 +611,6 @@ if st.session_state.get("engine_done"):
                 f"📉 **Needs more work** — RL Sharpe ({rl_sharpe:.3f}) ≤ Buy&Hold ({bh_sharpe:.3f})"
             )
 
-        # ── ML Model Ranking ─────────────────────────────────────────────
         st.markdown('<div class="section-header">🏅 ML Model Ranking</div>',
                     unsafe_allow_html=True)
 
@@ -681,7 +633,6 @@ if st.session_state.get("engine_done"):
             },
         )
 
-        # ── Config Summary ────────────────────────────────────────────────
         st.markdown('<div class="section-header">📝 Config Summary</div>',
                     unsafe_allow_html=True)
 
@@ -696,9 +647,6 @@ if st.session_state.get("engine_done"):
         with config_cols[3]:
             render_metric_card("RL Timesteps", RL_TIMESTEPS, fmt="int")
 
-    # ══════════════════════════════════════════════════════════════════════
-    #  TAB 2: EQUITY CURVES
-    # ══════════════════════════════════════════════════════════════════════
     with tab_equity:
         st.markdown('<div class="section-header">📈 Equity Curves — All Strategies vs Benchmarks</div>',
                     unsafe_allow_html=True)
@@ -707,7 +655,6 @@ if st.session_state.get("engine_done"):
             caption="Equity curves for all ML models, PPO RL agent, and benchmarks"
         )
 
-        # ── Risk Summary Table ────────────────────────────────────────────
         risk_csv = os.path.join(SAVE_DIR_REPORTS, "risk_summary.csv")
         if os.path.exists(risk_csv):
             st.markdown('<div class="section-header">📋 Risk Summary</div>',
@@ -715,11 +662,7 @@ if st.session_state.get("engine_done"):
             risk_df = pd.read_csv(risk_csv)
             st.dataframe(risk_df, use_container_width=True, hide_index=True)
 
-    # ══════════════════════════════════════════════════════════════════════
-    #  TAB 3: ML PREDICTIONS
-    # ══════════════════════════════════════════════════════════════════════
     with tab_ml:
-        # ── Accuracy Comparison ───────────────────────────────────────────
         st.markdown('<div class="section-header">📊 Accuracy Comparison</div>',
                     unsafe_allow_html=True)
         show_image_safe(
@@ -727,15 +670,12 @@ if st.session_state.get("engine_done"):
             caption="Model accuracy comparison"
         )
 
-        # ── Confusion Matrices ────────────────────────────────────────────
         st.markdown('<div class="section-header">🔢 Confusion Matrices</div>',
                     unsafe_allow_html=True)
         show_image_safe(
             os.path.join(SAVE_DIR_PLOTS, "confusion_matrices.png"),
             caption="Confusion matrices for all models"
         )
-
-        # ── Individual Prediction Charts ──────────────────────────────────
         st.markdown('<div class="section-header">🔮 Per-Model Predictions</div>',
                     unsafe_allow_html=True)
 
@@ -755,15 +695,10 @@ if st.session_state.get("engine_done"):
                         with col:
                             show_image_safe(path, caption=f"{name} — Test Period Prediction")
 
-    # ══════════════════════════════════════════════════════════════════════
-    #  TAB 4: MONTE CARLO
-    # ══════════════════════════════════════════════════════════════════════
     with tab_mc:
         if mc_reports:
             st.markdown('<div class="section-header">🎲 Monte Carlo Validation</div>',
                         unsafe_allow_html=True)
-
-            # ── MC Report Cards ───────────────────────────────────────────
             mc_tabs = st.tabs(["📦 Block Bootstrap", "💥 Stress Test", "🔀 Perturbation"])
 
             for mc_tab, (method, report) in zip(mc_tabs, mc_reports.items()):
@@ -775,7 +710,6 @@ if st.session_state.get("engine_done"):
                         with cols[k % 4]:
                             st.metric(label=metric_name, value=metric_val)
 
-            # ── MC Plots ──────────────────────────────────────────────────
             st.markdown('<div class="section-header">📈 Monte Carlo Charts</div>',
                         unsafe_allow_html=True)
 
@@ -801,15 +735,11 @@ if st.session_state.get("engine_done"):
         else:
             st.info("🎲 Monte Carlo simulation was not run. Enable it in the sidebar and re-run.")
 
-    # ══════════════════════════════════════════════════════════════════════
-    #  TAB 5: WALK-FORWARD
-    # ══════════════════════════════════════════════════════════════════════
     with tab_wf:
         if not wf_results.empty:
             st.markdown('<div class="section-header">📋 Walk-Forward Validation</div>',
                         unsafe_allow_html=True)
 
-            # ── Summary Metrics ───────────────────────────────────────────
             wf_cols = st.columns(4)
             with wf_cols[0]:
                 render_metric_card("Folds", len(wf_results), fmt="int")
@@ -824,14 +754,11 @@ if st.session_state.get("engine_done"):
                 render_metric_card("Sharpe Stability",
                                    "STABLE" if std_sharpe < 0.5 else "REVIEW",
                                    fmt="str")
-
-            # ── Walk-Forward Plot ─────────────────────────────────────────
             show_image_safe(
                 os.path.join(SAVE_DIR_PLOTS, "walk_forward.png"),
                 caption="Walk-forward validation results per fold"
             )
 
-            # ── Walk-Forward Table ────────────────────────────────────────
             st.markdown('<div class="section-header">📄 Fold Details</div>',
                         unsafe_allow_html=True)
             st.dataframe(wf_results, use_container_width=True, hide_index=True)
@@ -839,7 +766,6 @@ if st.session_state.get("engine_done"):
             st.info("📋 Walk-forward validation was not run. Enable it in the sidebar and re-run.")
 
 else:
-    # ── Welcome state ─────────────────────────────────────────────────────
     st.markdown("""
     <div style="
         text-align: center;
@@ -886,7 +812,6 @@ else:
     </div>
     """, unsafe_allow_html=True)
 
-    # Show existing results if available from previous runs
     if os.path.exists(os.path.join(SAVE_DIR_PLOTS, "equity_curves.png")):
         st.markdown('<div class="gold-divider"></div>', unsafe_allow_html=True)
         with st.expander("📂 View Previous Run Results", expanded=False):
