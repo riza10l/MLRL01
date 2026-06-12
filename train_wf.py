@@ -54,8 +54,11 @@ class WalkForwardEngine:
             
             print(f"\n{'='*60}\n[FOLD] Train: {start_year}-{train_end-1} | Test: {train_end}-{test_end-1}\n{'='*60}")
             
+            EMBARGO_BARS = 60  # Match main pipeline embargo
             df_train = df[(df['year'] >= start_year) & (df['year'] < train_end)].reset_index(drop=True)
-            df_test = df[(df['year'] >= train_end) & (df['year'] < test_end)].reset_index(drop=True)
+            df_test_raw = df[(df['year'] >= train_end) & (df['year'] < test_end)].reset_index(drop=True)
+            # Apply embargo: skip first EMBARGO_BARS rows of test to prevent label leakage
+            df_test = df_test_raw.iloc[EMBARGO_BARS:].reset_index(drop=True)
             
             if len(df_test) < 50: 
                 print(f"  Skipping fold {train_end}: Not enough test data ({len(df_test)} rows)")

@@ -20,16 +20,20 @@ class DifferentialSharpeReward:
     def compute(self, step_return, friction_paid, equity_ratio, trade_executed):
         self.n_steps += 1
 
-        # 1. Update running statistics
+        # 1. Capture t-1 statistics before update (Moody & Saffell formulation)
+        prev_A = self.A
+        prev_B = self.B
+
+        # 2. Update running statistics for next step
         self.A += self.eta * (step_return - self.A)
         self.B += self.eta * (step_return**2 - self.B)
 
-        # 2. Differential Sharpe (numerically stable)
-        denom = self.B - self.A**2
+        # 3. Differential Sharpe using t-1 statistics
+        denom = prev_B - prev_A**2
         if denom > 1e-10:
-            dsr = (self.B * step_return - 0.5 * self.A * step_return**2) / (denom ** 1.5)
+            dsr = (prev_B * step_return - 0.5 * prev_A * step_return**2) / (denom ** 1.5)
         else:
-            dsr = step_return * 10
+            dsr = step_return / (np.sqrt(prev_B) + 1e-6)
 
         # 3. Transaction cost penalty
         cost_penalty = self.lambda_cost * friction_paid
@@ -227,8 +231,8 @@ class TradingEnv(gym.Env):
         return obs, reward, terminated, truncated, info
 
     def _get_obs(self) -> np.ndarray:
-        # Use previous step's features (the last COMPLETED bar)
-        obs_step = max(0, self.current_step - 1)
+        # Features in df are already shift(1) safe — use current_step directly
+        obs_step = self.current_step
 
         if self.feature_columns:
             latest = self.df.iloc[obs_step][self.feature_columns].values.astype(np.float32)

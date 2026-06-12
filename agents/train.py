@@ -79,21 +79,24 @@ def split_data(df, feature_cols, train_ratio=0.80, embargo=EMBARGO_BARS):
     print(f"[SPLIT] Train: {len(X_train):,} | Embargo: {embargo} bars | Test: {len(X_test):,}")
     return X_train, X_test, y_train, y_test, X_train_sc, X_test_sc, dates_test, close_test, scaler
 
-def get_ml_models():
-    return {
+def get_ml_models(skip_svm=True):
+    models = {
         "Logistic Regression": LogisticRegression(max_iter=1000, random_state=42),
         "Decision Tree": DecisionTreeClassifier(max_depth=5, random_state=42),
-        "Random Forest": RandomForestClassifier(n_estimators=200, random_state=42, n_jobs=-1),
-        "Gradient Boosting": GradientBoostingClassifier(n_estimators=200, random_state=42),
-        "XGBoost": XGBClassifier(n_estimators=200, eval_metric="logloss", random_state=42),
-        "LightGBM": LGBMClassifier(n_estimators=200, random_state=42, verbose=-1),
-        "SVM": SVC(kernel="rbf", probability=True, random_state=42),
+        "Random Forest": RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=2),
+        "Gradient Boosting": GradientBoostingClassifier(n_estimators=100, random_state=42),
+        "XGBoost": XGBClassifier(n_estimators=100, eval_metric="logloss", random_state=42, n_jobs=2),
+        "LightGBM": LGBMClassifier(n_estimators=100, random_state=42, n_jobs=2, verbose=-1),
     }
+    if not skip_svm:
+        models["SVM"] = SVC(kernel="rbf", probability=True, cache_size=1000, random_state=42)
+    return models
 
 def train_ml_models(X_train, X_test, y_train, y_test, X_train_sc, X_test_sc):
     
     from sklearn.metrics import accuracy_score, precision_score, recall_score
-    models = get_ml_models()
+    skip_svm = os.environ.get("SKIP_SVM", "True").lower() == "true"
+    models = get_ml_models(skip_svm=skip_svm)
     predictions = {}
     results = []
     trained = {}

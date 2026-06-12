@@ -1,6 +1,7 @@
 
 import os
 import numpy as np
+import torch
 from stable_baselines3 import PPO
 
 class PPOAgent:
@@ -23,6 +24,10 @@ class PPOAgent:
         self.env = env
         self.use_lstm = use_lstm
         self.verbose = verbose
+        
+        # Explicitly check for GPU acceleration availability
+        torch_device = "cuda" if torch.cuda.is_available() else "cpu"
+        print(f"[AGENT] PyTorch detected device: {torch_device.upper()} (CUDA Available: {torch.cuda.is_available()})")
 
         if use_lstm:
             # Prioritas 9: Recurrent PPO
@@ -73,12 +78,13 @@ class PPOAgent:
             )
             print(f"[AGENT] Using PPO ({policy})")
 
-    def train(self, total_timesteps=100_000, progress_bar=False):
+    def train(self, total_timesteps=100_000, progress_bar=False, callback=None):
         
         print(f"[AGENT] Training PPO ({total_timesteps:,} timesteps)...")
         self.model.learn(
             total_timesteps=total_timesteps,
             progress_bar=progress_bar,
+            callback=callback,
         )
         print("[AGENT] Training complete!")
         return self.model
